@@ -1,0 +1,194 @@
+// =============================================================================
+// Schema do banco de dados — Inventário de T.I.
+// Banco: SQLite (arquivo local). Com Prisma, migrar para PostgreSQL depois é
+// simples: basta trocar o provider e a DATABASE_URL.
+//
+// Observação: o SQLite (via Prisma) não suporta o tipo `enum`. Por isso,
+// "Status do Ativo" e "Condição" são armazenados como String e validados no
+// backend com Zod (constantes em src/modules/equipment/equipment.constants.ts).
+// O efeito de "lista fixa" é garantido pela validação.
+// =============================================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Usuários DO SISTEMA (quem faz login). Não confundir com "Usuário Atual" de um
+// equipamento (que é o responsável/colaborador, guardado como texto no item).
+// -----------------------------------------------------------------------------
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("COMMON") // "ADMIN" | "COMMON"
+  active       Boolean  @default(true)
+  // Unidade (tenant) em que o usuário trabalha. Comum só entra na dele; admin
+  // pode entrar em qualquer uma.
+  unitId       String?
+  unit         Unit?    @relation(fields: [unitId], references: [id])
+  lastUnitId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([unitId])
+}
+
+// -----------------------------------------------------------------------------
+// Categorias / tipos de equipamento — EXTENSÍVEIS pela tela, sem mexer no código.
+// Ex.: Notebook, Mouse, Teclado, Combo mouse/teclado, Fone de ouvido, Monitor,
+// Celular, Outros...
+// -----------------------------------------------------------------------------
+model Category {
+  id        String      @id @default(uuid())
+  name      String
+  // Unidade (tenant) dona da categoria — o mesmo nome pode existir em unidades
+  // diferentes; é único DENTRO de cada unidade.
+  unitId    String?
+  unit      Unit?       @relation(fields: [unitId], references: [id])
+  createdAt DateTime    @default(now())
+  equipment Equipment[]
+
+  @@unique([name, unitId])
+  @@index([unitId])
+}
+
+// -----------------------------------------------------------------------------
+// Equipamento (o ativo). Um "combo mouse/teclado" é UM único registro.
+// -----------------------------------------------------------------------------
+model Equipment {
+  id           String @id @default(uuid())
+
+  // Unidade (tenant) dona do equipamento — isola os dados entre unidades.
+  unitId       String?
+  unit         Unit?  @relation(fields: [unitId], references: [id])
+
+  assetId      String  @unique // ID do Ativo (código interno)
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+
+  brand        String? // Marca
+  model        String? // Modelo
+  color        String? // Cor
+  configuration String? // Configuração
+  serialNumber String? // Número de Série
+  assetTag     String? // Número de Patrimônio
+
+  status       String  @default("EM_ESTOQUE") // EM_USO | EM_ESTOQUE | EM_MANUTENCAO | DESCARTADO
+  condition    String  @default("BOM")        // NOVO | BOM | REGULAR | RUIM | DEFEITO
+
+  supplier     String? // Fornecedor
+  location     String? // Localização
+
+  // Propriedade do ativo (para o painel: próprios x alugados)
+  ownership    String? // PROPRIO | ALUGADO
+
+  // Campos específicos de CELULAR (usados quando a categoria é telefone/celular)
+  pelicula     String? // Sim | Não
+  capa         String? // Sim | Não
+  imei1        String? // IMEI 1
+  imei2        String? // IMEI 2
+  macAddress   String? // Endereço MAC
+
+  // Responsável atual (preenchido quando status = EM_USO)
+  currentUserName  String? // Usuário Atual
+  department       String? // Departamento
+  manager          String? // Gestor
+  userEmail        String? // E-mail do Usuário
+  userCpf          String? // CPF do Usuário (usado nos celulares)
+
+  acquisitionDate  DateTime? // Data de Aquisição
+  deliveryDate     DateTime? // Data de Entrega ao Usuário
+  warrantyEndDate  DateTime? // Garantia (Data Final)
+  lastCheckDate    DateTime? // Última Conferência
+
+  value        Float?  // Valor (R$)
+  notes        String? // Observações (aparece no termo em PDF)
+  accessories  String? // Acessórios / itens inclusos (aparece no termo em PDF)
+
+  // Para o alerta de "parado sem movimentação": marca quando o status mudou
+  // pela última vez (ex.: entrou em estoque).
+  statusChangedAt DateTime @default(now())
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Histórico de responsáveis (gerado automaticamente)
+  assignments  AssignmentHistory[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([unitId])
+}
+
+// -----------------------------------------------------------------------------
+// Histórico de responsáveis por equipamento — gerado AUTOMATICAMENTE.
+// Cada vez que o "Usuário Atual" muda, fecha-se o registro anterior (endDate)
+// e abre-se um novo (endDate = null = responsável atual).
+// -----------------------------------------------------------------------------
+model AssignmentHistory {
+  id          String    @id @default(uuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  userName    String    // quem foi/é responsável
+  userEmail   String?
+  department  String?
+  manager     String?
+
+  startDate   DateTime  @default(now()) // início da responsabilidade
+  endDate     DateTime?                 // fim (null = é o responsável atual)
+  note        String?                   // observação opcional da troca
+
+  createdAt   DateTime  @default(now())
+
+  @@index([equipmentId])
+}
+
+// -----------------------------------------------------------------------------
+// Unidades / filiais da empresa — usadas no Termo (endereço + CNPJ da unidade
+// onde o colaborador está lotado).
+// -----------------------------------------------------------------------------
+model Unit {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  cnpj      String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  users     User[]
+  categories Category[]
+  equipment Equipment[]
+  settings  Settings?
+}
+
+// -----------------------------------------------------------------------------
+// Configurações dos alertas — UMA linha por unidade (isolamento por tenant).
+// -----------------------------------------------------------------------------
+model Settings {
+  unitId               String @id
+  unit                 Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  idleDaysLimit        Int @default(90) // dias parado em estoque para alertar
+  conferenceDaysLimit  Int @default(180) // dias sem conferência para alertar
+  warrantyWarningDays  Int @default(30) // dias antes do fim da garantia para alertar
+  updatedAt            DateTime @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// Template editável do Termo de Responsabilidade (linha única, id = 1).
+// O conteúdo é HTML com placeholders do Handlebars (ex.: {{usuario.nome}}).
+// -----------------------------------------------------------------------------
+model DocumentTemplate {
+  id        Int      @id @default(1)
+  name      String   @default("Termo de Responsabilidade")
+  content   String   // HTML/Handlebars
+  updatedAt DateTime @updatedAt
+}

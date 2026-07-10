@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+*.db
+*.db-journal
+*.db-wal
+*.bak
+prisma/dev.db
+prisma/migrations/dev.db

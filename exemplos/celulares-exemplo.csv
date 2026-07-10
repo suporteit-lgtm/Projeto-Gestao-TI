@@ -1,0 +1,4 @@
+ID do Ativo;Tipo;Marca;Modelo;Cor;Pelicula;Capa;IMEI 1;IMEI 2;Endereço MAC;Número de Patrmônio;Status do Ativo;Condição;Fornecedor;Localização;Usuário Antigo;Usuário Atual;Departamento;Gestor;CPF do Usuário;Data de Aquisição;Data de Entrega ao Usuário;Observações;Valor (R$)
+;Celular;XIAOMI;POCO C65;Preto;Sim;Sim;868244072097889;868244072097897;A1:B2:C3:D4:E5:F6;0001;Em uso;Regular;LOCADORA;LOCADORA CENTRO;;Kaique Santos;T.I;Felipe Côrrea;123.456.789-09;01/03/2024;10/03/2024;Aparelho corporativo;1000,00
+;Celular;Samsung;Galaxy A15;Azul;Sim;Não;350000000000001;350000000000002;AA:BB:CC:11:22:33;0002;Em estoque;Novo;LOCADORA;Almoxarifado TI;;;;;;15/05/2024;;Reserva;1200,00
+;Celular;Apple;iPhone 13;Branco;Sim;Sim;013000000000009;;B0:C1:D2:E3:F4:05;0003;Em uso;Bom;Própria;Diretoria;Ana Paula;Roberto Nunes;Diretoria;Marcos Vianna;987.654.321-00;20/01/2023;01/02/2023;Trocado de usuário em 2024;5500,00

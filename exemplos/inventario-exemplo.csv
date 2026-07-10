@@ -1,0 +1,6 @@
+ID do Ativo;Tipo;Marca;Modelo;Cor;Configuração;Número de Série;Número de Patrimônio;Status do Ativo;Condição;Fornecedor;Localização;Usuário Atual;Usuário Antigo;Departamento;Gestor;E-mail do Usuário;Data de Aquisição;Data de Entrega ao Usuário;Garantia (Data Final);Última Conferência;Valor (R$)
+NB-1001;Notebook;Lenovo;ThinkPad T14;Preto;i5 / 16GB / 256GB;LNV-T14-AA01;PAT-5001;Em uso;Bom;Lenovo;Matriz - 1º andar;Fernanda Reis;Lucas Martins;TI;Roberto Nunes;fernanda.reis@empresa.com;15/03/2023;10/01/2024;15/03/2026;01/05/2025;5800,00
+MS-2001;Mouse;Logitech;M170;Preto;;LOG-M170-9921;;Em estoque;Novo;Kabum;Almoxarifado TI;;;;;;05/02/2024;;;10/02/2024;75,90
+MON-3001;Monitor;Samsung;LF24T350;Preto;24 polegadas;SAM-T350-7781;PAT-5102;Em uso;Regular;Samsung;Matriz - 2º andar;Bruno Carvalho;;Comercial;Ana Dias;bruno.carvalho@empresa.com;20/08/2022;05/09/2022;20/08/2025;15/01/2025;980,00
+CEL-4001;Celular;Apple;iPhone 12;Branco;128GB;APL-IP12-3345;PAT-5210;Em uso;Bom;Apple;Externo;Ricardo Gomes;Paula Bastos;Diretoria;Marcos Vianna;ricardo.gomes@empresa.com;10/10/2021;01/12/2023;10/10/2024;20/02/2025;4200,00
+TC-5001;Teclado;Microsoft;Wired 600;Preto;ABNT2;MS-W600-1188;;Em manutenção;Defeito;Kabum;Assistência;;;;;;01/06/2023;;01/06/2025;;120,00

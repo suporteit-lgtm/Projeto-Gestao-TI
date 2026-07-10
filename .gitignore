@@ -1,0 +1,24 @@
+# Dependências (nunca subir — são reinstaladas com "npm install")
+node_modules/
+**/node_modules/
+
+# Builds
+dist/
+**/dist/
+
+# Banco de dados local e backups
+*.db
+*.db-journal
+*.db-wal
+*.bak
+**/prisma/dev.db
+
+# Variáveis de ambiente (contêm segredos)
+.env
+**/.env
+
+# Diversos
+.DS_Store
+*.log
+.vercel
+.env*
