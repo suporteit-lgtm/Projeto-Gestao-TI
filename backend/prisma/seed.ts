@@ -2,6 +2,8 @@
 // os dados reais. Roda com `npm run seed` (ou junto no `npm run setup`).
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import dotenv from "dotenv";
+dotenv.config();
 import { DEFAULT_TERMO_TEMPLATE } from "../src/modules/documents/default-template";
 
 const prisma = new PrismaClient();
