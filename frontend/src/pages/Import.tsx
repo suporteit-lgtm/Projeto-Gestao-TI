@@ -530,37 +530,45 @@ export default function ImportPage() {
         </div>
       </Modal>
 
-      {/* Loading animado de importação */}
-      <Modal open={importProgress !== null} title="Importando Dados" onClose={() => {}}>
-        <div className="space-y-6 py-8 px-4">
-          <div className="flex flex-col items-center justify-center space-y-5">
-            <div className="relative flex items-center justify-center">
-              {/* Spinner */}
-              <div className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-800 border-t-blue-600 animate-spin"></div>
-              {/* Porcentagem no meio */}
-              <div className="absolute text-xl font-bold text-slate-800 dark:text-slate-100">
-                {importProgress}%
+      {/* Loading animado de importação Full Screen */}
+      {importProgress !== null && (
+        <div className="fixed inset-0 z-[9999] bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6">
+          <div className="w-full max-w-md flex flex-col items-center">
+            {/* Ícone e Spinner */}
+            <div className="mb-10 relative">
+              <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full animate-pulse" />
+              <div className="w-32 h-32 relative flex items-center justify-center bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl border border-slate-100 dark:border-slate-800/60">
+                {/* Spinner */}
+                <div className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-800 border-t-blue-600 border-r-blue-600 animate-spin" />
+                {/* Porcentagem */}
+                <div className="absolute text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tighter">
+                  {importProgress}<span className="text-sm font-medium text-slate-400">%</span>
+                </div>
               </div>
             </div>
-            
-            <div className="text-center">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-                Processando registros...
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Por favor, aguarde enquanto salvamos tudo no banco de dados.
-              </p>
+
+            <h2 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400 mb-3 text-center tracking-tight">
+              Processando registros
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 text-center text-sm mb-12 max-w-xs leading-relaxed">
+              Estamos organizando e salvando seus dados com segurança. Por favor, aguarde e não feche a página.
+            </p>
+
+            {/* Barra de Progresso Glow */}
+            <div className="w-full relative">
+              {/* Sombra de luz para a barra */}
+              <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-8 bg-blue-500/20 blur-xl rounded-full" style={{ width: `${importProgress}%` }} />
+              
+              <div className="w-full h-3 rounded-full bg-slate-200/50 dark:bg-slate-800/80 overflow-hidden relative z-10 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500 bg-[length:200%_100%] animate-[shimmer_2s_linear_infinite] rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${importProgress}%` }}
+                />
+              </div>
             </div>
           </div>
-          
-          <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            <div
-              className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${importProgress}%` }}
-            />
-          </div>
         </div>
-      </Modal>
+      )}
     </div>
   );
 }
