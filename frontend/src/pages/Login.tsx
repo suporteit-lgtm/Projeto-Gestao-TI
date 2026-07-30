@@ -117,8 +117,8 @@ export default function Login() {
         </div>
 
         {/* Centro: Elemento visual e texto */}
-        <div className="w-full max-w-xl my-auto relative z-10 space-y-6">
-          <div>
+        <div className="w-full max-w-5xl my-auto relative z-10 space-y-8">
+          <div className="max-w-xl">
             <h2 className="text-4xl font-extrabold text-white tracking-tight leading-tight">
               Gestão Inteligente de <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-300">Equipamentos</span>
             </h2>
@@ -128,15 +128,15 @@ export default function Login() {
           </div>
 
           {/* Listagem de Unidades (Quadradinhos com dados de cada uma) */}
-          <div className="space-y-3">
+          <div className="space-y-3 w-full">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-white/60 uppercase tracking-wider">Status das Unidades</span>
               <span className="text-[11px] text-white/40 font-medium">{unitsStats.length} unidades ativas</span>
             </div>
 
             {/* Scrollable list/grid of units */}
-            <div className="max-h-[360px] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
-              <div className="grid sm:grid-cols-2 gap-3">
+            <div className="max-h-[360px] overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                 {unitsStats.map((u) => {
                   const hasAlerts = u.alertas > 0;
                   return (

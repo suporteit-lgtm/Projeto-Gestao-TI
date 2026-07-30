@@ -238,7 +238,7 @@ export default function Settings() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="w-full px-4 py-10 sm:px-6 lg:px-8">
       <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-6">
           <div className="sticky top-6 space-y-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 shadow-sm p-6">
@@ -281,32 +281,43 @@ export default function Settings() {
               iconBg="bg-amber-500/10"
             >
               {msg && <Alert kind={msg.includes("sucesso") ? "success" : undefined}>{msg}</Alert>}
-              <div className="grid sm:grid-cols-1 gap-5 mt-2">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-2">
                 {(
                   [
-                    ["idleDaysLimit", "Parado em estoque (dias)", "Alerta quando o equipamento ficar parado mais que este limite.", "ti-package-off", "text-rose-500", "bg-rose-500/10"],
-                    ["conferenceDaysLimit", "Conferência atrasada (dias)", "Dias desde a última conferência de inventário.", "ti-clipboard-check", "text-violet-500", "bg-violet-500/10"],
-                    ["warrantyWarningDays", "Aviso de garantia (dias)", "Antecedência para avisar do vencimento de garantia.", "ti-shield-exclamation", "text-blue-500", "bg-blue-500/10"],
+                    ["idleDaysLimit", "Parado em estoque", "Alerta quando o equipamento ficar parado mais que este limite.", "ti-package-off", "#f43f5e", "text-rose-500", "bg-rose-500/10"],
+                    ["conferenceDaysLimit", "Conferência atrasada", "Dias desde a última conferência de inventário.", "ti-clipboard-check", "#8b5cf6", "text-violet-500", "bg-violet-500/10"],
+                    ["warrantyWarningDays", "Aviso de garantia", "Antecedência para avisar do vencimento de garantia.", "ti-shield-exclamation", "#3b82f6", "text-blue-500", "bg-blue-500/10"],
                   ] as const
-                ).map(([key, label, hint, icon, iconColor, iconBg]) => (
-                  <div key={key} className="space-y-2 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/80 p-4">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center`}>
-                        <i className={`ti ${icon} ${iconColor}`}></i>
+                ).map(([key, label, hint, icon, accent, iconColor, iconBg]) => (
+                  <div
+                    key={key}
+                    className="group space-y-3 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-950/80 p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                    style={{ borderTop: `3px solid ${accent}` }}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
+                        <i className={`ti ${icon} ${iconColor} text-base`}></i>
                       </div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                         {label}
                       </div>
                     </div>
-                    <input
-                      type="number"
-                      min={1}
-                      className="input w-full"
-                      disabled={!isAdmin}
-                      value={settings[key]}
-                      onChange={(e) => setSettings({ ...settings, [key]: Number(e.target.value) })}
-                    />
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">{hint}</p>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        className="input w-full pr-14 text-2xl font-bold tabular-nums"
+                        disabled={!isAdmin}
+                        value={settings[key]}
+                        onChange={(e) => setSettings({ ...settings, [key]: Number(e.target.value) })}
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 dark:text-slate-500">
+                        dias
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">{hint}</p>
                   </div>
                 ))}
               </div>

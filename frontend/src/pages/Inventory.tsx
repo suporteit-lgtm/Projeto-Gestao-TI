@@ -9,6 +9,13 @@ import AssignModal from "../components/AssignModal";
 import { formatMoney } from "../lib/format";
 import { useData } from "../context/DataContext";
 
+interface Collaborator {
+  name: string;
+  department: string | null;
+  location: string | null;
+  equipments: Equipment[];
+}
+
 export default function Inventory() {
   const {
     categories,
@@ -25,6 +32,9 @@ export default function Inventory() {
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // Visão
+  const [viewMode, setViewMode] = useState<'equipment' | 'collaborator'>('equipment');
 
   // Filtros
   const [search, setSearch] = useState("");
@@ -108,14 +118,37 @@ export default function Inventory() {
   const hasFilters = search || fCategory || fStatus || fCondition || fResponsible || fDepartment || fLocation;
   const activeFilterCount = [fCategory, fStatus, fCondition, fResponsible, fDepartment, fLocation].filter(Boolean).length;
 
+  const collaborators = useMemo(() => {
+    const map = new Map<string, Collaborator>();
+    for (const eq of items) {
+      const name = eq.currentUserName?.trim();
+      if (!name) continue;
+      if (!map.has(name)) {
+        map.set(name, {
+          name,
+          department: eq.department,
+          location: eq.location,
+          equipments: []
+        });
+      }
+      map.get(name)!.equipments.push(eq);
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
+
   // Paginação - Computação
-  const totalItems = items.length;
+  const totalItems = viewMode === 'equipment' ? items.length : collaborators.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
   const displayedItems = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return items.slice(start, start + itemsPerPage);
   }, [items, currentPage]);
+
+  const displayedCollaborators = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return collaborators.slice(start, start + itemsPerPage);
+  }, [collaborators, currentPage]);
 
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
@@ -144,7 +177,11 @@ export default function Inventory() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">Inventário</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            {loading ? "Carregando..." : `${items.length} equipamento${items.length !== 1 ? "s" : ""} encontrado${items.length !== 1 ? "s" : ""}`}
+            {loading ? "Carregando..." : 
+              viewMode === 'equipment' 
+                ? `${items.length} equipamento${items.length !== 1 ? "s" : ""} encontrado${items.length !== 1 ? "s" : ""}`
+                : `${collaborators.length} colaborador${collaborators.length !== 1 ? "es" : ""} encontrado${collaborators.length !== 1 ? "s" : ""}`
+            }
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -173,6 +210,32 @@ export default function Inventory() {
       </div>
 
       {loadError && <Alert>{loadError}</Alert>}
+
+      {/* ── View Toggle ── */}
+      <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200 dark:border-slate-700/60">
+        <button
+          onClick={() => { setViewMode('equipment'); setCurrentPage(1); }}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            viewMode === 'equipment'
+              ? "bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm border border-slate-200 dark:border-slate-600"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <i className="ti ti-devices text-lg"></i>
+          Equipamentos
+        </button>
+        <button
+          onClick={() => { setViewMode('collaborator'); setCurrentPage(1); }}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            viewMode === 'collaborator'
+              ? "bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm border border-slate-200 dark:border-slate-600"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <i className="ti ti-users text-lg"></i>
+          Colaboradores
+        </button>
+      </div>
 
       {/* ── Search + Filters ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
@@ -290,133 +353,198 @@ export default function Inventory() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
-                  {["ID / Tipo", "Marca / Modelo", "Status", "Condição", "Responsável", "Localização", "Valor", ""].map((h, i) => (
-                    <th
-                      key={i}
-                      className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${
-                        i === 7 ? "text-right" : "text-left"
-                      }`}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {displayedItems.map((eq) => (
-                  <tr
-                    key={eq.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
-                  >
-                    {/* ID / Tipo */}
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/equipamento/${eq.id}`}
-                        className="font-semibold text-blue-600 dark:text-blue-400 hover:underline text-sm"
+            {viewMode === 'equipment' ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+                    {["ID / Tipo", "Marca / Modelo", "Status", "Condição", "Responsável", "Localização", "Valor", ""].map((h, i) => (
+                      <th
+                        key={i}
+                        className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${
+                          i === 7 ? "text-right" : "text-left"
+                        }`}
                       >
-                        {eq.assetId}
-                      </Link>
-                      {eq.category?.name && (
-                        <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
-                          <i className="ti ti-tag text-[10px]"></i>
-                          {eq.category.name}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Marca / Modelo */}
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800 dark:text-slate-200">
-                        {eq.brand} {eq.model}
-                      </div>
-                      {eq.serialNumber && (
-                        <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
-                          SN: {eq.serialNumber}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-4 py-3">
-                      <StatusBadge status={eq.status} />
-                    </td>
-
-                    {/* Condição */}
-                    <td className="px-4 py-3">
-                      <ConditionBadge condition={eq.condition} />
-                    </td>
-
-                    {/* Responsável */}
-                    <td className="px-4 py-3">
-                      {eq.currentUserName ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {eq.currentUserName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()}
-                          </div>
-                          <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[120px]">{eq.currentUserName}</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-300 dark:text-slate-600">—</span>
-                      )}
-                    </td>
-
-                    {/* Localização */}
-                    <td className="px-4 py-3">
-                      {eq.location ? (
-                        <span className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                          <i className="ti ti-map-pin text-slate-400 text-xs"></i>
-                          {eq.location}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 dark:text-slate-600">—</span>
-                      )}
-                    </td>
-
-                    {/* Valor */}
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-400">
-                      {formatMoney(eq.value)}
-                    </td>
-
-                    {/* Ações */}
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => setAssigning(eq)}
-                          title="Atribuir responsável"
-                          className="w-7 h-7 flex items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                        >
-                          <i className="ti ti-user-check text-sm"></i>
-                        </button>
-                        <button
-                          onClick={() => { setEditing(eq); setShowForm(true); }}
-                          title="Editar"
-                          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                        >
-                          <i className="ti ti-pencil text-sm"></i>
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(eq)}
-                          title="Excluir"
-                          className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-                        >
-                          <i className="ti ti-trash text-sm"></i>
-                        </button>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {displayedItems.map((eq) => (
+                    <tr
+                      key={eq.id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
+                    >
+                      {/* ID / Tipo */}
+                      <td className="px-4 py-3">
                         <Link
                           to={`/equipamento/${eq.id}`}
-                          title="Ver detalhes"
-                          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          className="font-semibold text-blue-600 dark:text-blue-400 hover:underline text-sm"
                         >
-                          <i className="ti ti-arrow-right text-sm"></i>
+                          {eq.assetId}
                         </Link>
-                      </div>
-                    </td>
+                        {eq.category?.name && (
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
+                            <i className="ti ti-tag text-[10px]"></i>
+                            {eq.category.name}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Marca / Modelo */}
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-800 dark:text-slate-200">
+                          {eq.brand} {eq.model}
+                        </div>
+                        {eq.serialNumber && (
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
+                            SN: {eq.serialNumber}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        <StatusBadge status={eq.status} />
+                      </td>
+
+                      {/* Condição */}
+                      <td className="px-4 py-3">
+                        <ConditionBadge condition={eq.condition} />
+                      </td>
+
+                      {/* Responsável */}
+                      <td className="px-4 py-3">
+                        {eq.currentUserName ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                              {eq.currentUserName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()}
+                            </div>
+                            <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[120px]">{eq.currentUserName}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                      </td>
+
+                      {/* Localização */}
+                      <td className="px-4 py-3">
+                        {eq.location ? (
+                          <span className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                            <i className="ti ti-map-pin text-slate-400 text-xs"></i>
+                            {eq.location}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                      </td>
+
+                      {/* Valor */}
+                      <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-400">
+                        {formatMoney(eq.value)}
+                      </td>
+
+                      {/* Ações */}
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => setAssigning(eq)}
+                            title="Atribuir responsável"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                          >
+                            <i className="ti ti-user-check text-sm"></i>
+                          </button>
+                          <button
+                            onClick={() => { setEditing(eq); setShowForm(true); }}
+                            title="Editar"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          >
+                            <i className="ti ti-pencil text-sm"></i>
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(eq)}
+                            title="Excluir"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                          >
+                            <i className="ti ti-trash text-sm"></i>
+                          </button>
+                          <Link
+                            to={`/equipamento/${eq.id}`}
+                            title="Ver detalhes"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          >
+                            <i className="ti ti-arrow-right text-sm"></i>
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Colaborador</th>
+                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Departamento</th>
+                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Equipamentos</th>
+                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {displayedCollaborators.map((collab) => (
+                    <tr key={collab.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">
+                            {collab.name.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()}
+                          </div>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{collab.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {collab.department ? (
+                           <div className="text-slate-600 dark:text-slate-300 font-medium">{collab.department}</div>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                        {collab.location && (
+                           <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
+                             <i className="ti ti-map-pin text-[10px]"></i> {collab.location}
+                           </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {collab.equipments.map(eq => (
+                            <Link 
+                              key={eq.id} 
+                              to={`/equipamento/${eq.id}`}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-medium rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            >
+                              <i className="ti ti-device-laptop text-slate-400"></i>
+                              {eq.category?.name || "Equipamento"} <span className="text-slate-400 dark:text-slate-500 font-mono ml-0.5">{eq.assetId}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => download(`/documents/person/termo.pdf?nome=${encodeURIComponent(collab.name)}`, `termo-${collab.name}.pdf`)}
+                            title="Gerar Termo de Responsabilidade (Todos os itens)"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-medium text-xs transition-colors border border-emerald-200 dark:border-emerald-800/60"
+                          >
+                            <i className="ti ti-file-certificate text-sm"></i>
+                            Gerar Termo
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
             {/* Table footer com paginação */}
             <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 dark:bg-slate-800/20">
@@ -424,7 +552,7 @@ export default function Inventory() {
               <div className="text-xs text-slate-500 dark:text-slate-400 order-2 sm:order-1">
                 Exibindo <span className="font-semibold text-slate-800 dark:text-slate-200">{startItem}</span> a{" "}
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{endItem}</span> de{" "}
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{totalItems}</span> equipamentos
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{totalItems}</span> {viewMode === 'equipment' ? 'equipamentos' : 'colaboradores'}
               </div>
 
               {/* Controles de página */}

@@ -228,7 +228,7 @@ export default function Alerts() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       <style>{`
         @keyframes pulse-ring {
           0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(240, 98, 95, 0.4); }

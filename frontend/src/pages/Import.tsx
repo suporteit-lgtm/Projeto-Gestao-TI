@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Papa from "papaparse";
 import { api } from "../api/client";
-import { Alert } from "../components/ui";
+import { Alert, Modal } from "../components/ui";
 
 interface ImportField {
   key: string;
@@ -106,6 +106,7 @@ export default function ImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,8 +178,12 @@ export default function ImportPage() {
     }
   }
 
-  async function importar() {
-    if (!confirm(`Importar ${rows.length} linha(s)? Itens com ID já existente serão ignorados.`)) return;
+  function importar() {
+    setConfirmOpen(true);
+  }
+
+  async function executeImport() {
+    setConfirmOpen(false);
     setBusy(true);
     setError("");
     try {
@@ -201,7 +206,7 @@ export default function ImportPage() {
   const requiredMapped = fields.filter((f) => f.required).every((f) => mapping[f.key]);
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">Importar inventário</h1>
@@ -477,6 +482,29 @@ export default function ImportPage() {
           )}
         </div>
       )}
+
+      <Modal open={confirmOpen} title="Confirmar importação" onClose={() => setConfirmOpen(false)}>
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Você está prestes a importar <strong className="text-slate-800 dark:text-slate-200">{rows.length} linha(s)</strong>.
+            Itens com ID já existente no sistema serão ignorados.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              className="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              onClick={() => setConfirmOpen(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+              onClick={executeImport}
+            >
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

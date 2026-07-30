@@ -75,7 +75,7 @@ export default function Users() {
   const ativos = users.filter((u) => u.active).length;
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="w-full px-4 py-10 sm:px-6 lg:px-8">
       <div className="space-y-6">
         <section className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 shadow-sm p-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
