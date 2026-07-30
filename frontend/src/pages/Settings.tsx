@@ -636,7 +636,6 @@ export default function Settings() {
                 </p>
               )}
             </SectionCard>
-            </SectionCard>
           )}
 
           {isAdmin && activeSection === "danger" && (
