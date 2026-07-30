@@ -107,6 +107,7 @@ export default function ImportPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -186,16 +187,39 @@ export default function ImportPage() {
     setConfirmOpen(false);
     setBusy(true);
     setError("");
+    setImportProgress(0);
+
+    const progressInterval = setInterval(() => {
+      setImportProgress((prev) => {
+        if (prev === null) return null;
+        // Avança rápido no começo, depois vai mais devagar, parando no 95%
+        const inc = prev < 50 ? Math.floor(Math.random() * 15) + 5 : Math.floor(Math.random() * 5) + 1;
+        const next = prev + inc;
+        return next > 95 ? 95 : next;
+      });
+    }, 300);
+
     try {
       const r = await api<ImportResult>("/import/commit", {
         method: "POST",
         body: { rows: mappedRows() },
       });
-      setResult(r);
+      
+      setImportProgress(100);
+      
+      // Aguarda meio segundo no 100% para o usuário ver antes de fechar
+      setTimeout(() => {
+        setResult(r);
+        setImportProgress(null);
+        setBusy(false);
+      }, 600);
+      
     } catch (err: any) {
       setError(err.message);
-    } finally {
+      setImportProgress(null);
       setBusy(false);
+    } finally {
+      clearInterval(progressInterval);
     }
   }
 
@@ -502,6 +526,38 @@ export default function ImportPage() {
             >
               Confirmar
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Loading animado de importação */}
+      <Modal open={importProgress !== null} title="Importando Dados" onClose={() => {}}>
+        <div className="space-y-6 py-8 px-4">
+          <div className="flex flex-col items-center justify-center space-y-5">
+            <div className="relative flex items-center justify-center">
+              {/* Spinner */}
+              <div className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-800 border-t-blue-600 animate-spin"></div>
+              {/* Porcentagem no meio */}
+              <div className="absolute text-xl font-bold text-slate-800 dark:text-slate-100">
+                {importProgress}%
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                Processando registros...
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Por favor, aguarde enquanto salvamos tudo no banco de dados.
+              </p>
+            </div>
+          </div>
+          
+          <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div
+              className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${importProgress}%` }}
+            />
           </div>
         </div>
       </Modal>
