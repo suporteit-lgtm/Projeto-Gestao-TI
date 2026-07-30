@@ -36,4 +36,20 @@ router.put("/", requireRole("ADMIN"), async (req, res, next) => {
   }
 });
 
+// Apenas admin pode apagar os dados do inventário (Zona de Perigo)
+router.delete("/wipe-data", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    // Usamos transação para garantir que apaga tudo ou nada.
+    // Apaga apenas dados operacionais. Usuários, Unidades e Configurações continuam.
+    await prisma.$transaction([
+      prisma.assignmentHistory.deleteMany(),
+      prisma.equipment.deleteMany(),
+      prisma.category.deleteMany(),
+    ]);
+    res.json({ message: "Dados do sistema apagados com sucesso." });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

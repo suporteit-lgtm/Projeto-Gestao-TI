@@ -82,6 +82,12 @@ export default function Settings() {
   const [termoErro, setTermoErro] = useState("");
   const [gerandoTermo, setGerandoTermo] = useState(false);
 
+  // Danger Zone
+  const [showWipeModal, setShowWipeModal] = useState(false);
+  const [wipeConfirmText, setWipeConfirmText] = useState("");
+  const [wipingData, setWipingData] = useState(false);
+  const [wipeMsg, setWipeMsg] = useState("");
+
   function loadUnits() {
     api<Unit[]>("/units").then(setUnits);
   }
@@ -216,6 +222,26 @@ export default function Settings() {
     }
   }
 
+  async function wipeData() {
+    if (wipeConfirmText !== "CONFIRMAR") {
+      setWipeMsg("Você precisa digitar CONFIRMAR em maiúsculo para prosseguir.");
+      return;
+    }
+    setWipeMsg("");
+    setWipingData(true);
+    try {
+      await api("/settings/wipe-data", { method: "DELETE" });
+      setShowWipeModal(false);
+      setWipeConfirmText("");
+      alert("Todos os dados do inventário foram apagados com sucesso.");
+      window.location.reload();
+    } catch (err: any) {
+      setWipeMsg(err.message);
+    } finally {
+      setWipingData(false);
+    }
+  }
+
   const [activeSection, setActiveSection] = useState("limits");
   const navItems = [
     { id: "limits", label: "Limites de alerta", icon: "ti-bell-ringing" },
@@ -223,6 +249,7 @@ export default function Settings() {
     { id: "units", label: "Unidades", icon: "ti-buildings" },
     { id: "term", label: "Gerar termo", icon: "ti-file-text" },
     { id: "template", label: "Template", icon: "ti-code" },
+    ...(isAdmin ? [{ id: "danger", label: "Zona de Perigo", icon: "ti-alert-triangle" }] : []),
   ];
 
   if (!settings) return <Spinner />;
@@ -609,9 +636,86 @@ export default function Settings() {
                 </p>
               )}
             </SectionCard>
+            </SectionCard>
+          )}
+
+          {isAdmin && activeSection === "danger" && (
+            <SectionCard
+              id="settings-danger"
+              icon="ti-alert-triangle"
+              title="Zona de Perigo"
+              description="Ações destrutivas e irreversíveis que afetam o funcionamento do sistema."
+              iconColor="text-red-500"
+              iconBg="bg-red-500/10"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-950/20">
+                <div>
+                  <h3 className="text-red-800 dark:text-red-400 font-medium text-sm">Limpar todos os dados</h3>
+                  <p className="text-red-600/80 dark:text-red-400/80 text-xs mt-1 max-w-[400px]">
+                    Isso irá apagar permanentemente todos os equipamentos, histórico de movimentações e categorias. Seu usuário de acesso e filiais (unidades) serão mantidos.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowWipeModal(true)}
+                  className="btn bg-red-600 hover:bg-red-700 text-white border-transparent shrink-0 text-sm h-10 px-4"
+                >
+                  <i className="ti ti-trash"></i> Apagar tudo
+                </button>
+              </div>
+            </SectionCard>
           )}
         </div>
       </div>
+
+      {showWipeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="p-6">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center mb-4">
+                <i className="ti ti-alert-triangle text-2xl"></i>
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Você tem certeza absoluta?</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Essa ação é <span className="font-semibold text-red-500">irreversível</span>. Serão apagados todos os equipamentos, categorias e o histórico de responsáveis. Para prosseguir, digite <strong>CONFIRMAR</strong> no campo abaixo.
+              </p>
+              
+              {wipeMsg && <Alert kind="error">{wipeMsg}</Alert>}
+              
+              <div className="mt-4">
+                <input
+                  type="text"
+                  placeholder="CONFIRMAR"
+                  className="input font-mono text-center tracking-widest text-red-600 dark:text-red-400 font-bold"
+                  value={wipeConfirmText}
+                  onChange={(e) => setWipeConfirmText(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  setShowWipeModal(false);
+                  setWipeConfirmText("");
+                  setWipeMsg("");
+                }}
+                className="btn-secondary"
+                disabled={wipingData}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={wipeData}
+                disabled={wipingData || wipeConfirmText !== "CONFIRMAR"}
+                className="btn bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed border-transparent"
+              >
+                {wipingData ? "Apagando..." : "Sim, apagar tudo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

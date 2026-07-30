@@ -106,6 +106,7 @@ export default function ImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showMapping, setShowMapping] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -121,23 +122,28 @@ export default function ImportPage() {
     setResult(null);
     setValidation(null);
     setFileName(file.name);
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      skipEmptyLines: true,
-      delimiter: "",
-      complete: (res) => {
-        const hdrs = (res.meta.fields ?? []).filter(Boolean);
-        setHeaders(hdrs);
-        setRows(res.data);
-        const auto: Record<string, string> = {};
-        for (const h of hdrs) {
-          const key = ALIASES[norm(h)];
-          if (key && !auto[key]) auto[key] = h;
-        }
-        setMapping(auto);
-      },
-      error: (err) => setError("Erro ao ler o arquivo: " + err.message),
-    });
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
+      const head = parsed.meta.fields ?? [];
+      setHeaders(head);
+      setRows(parsed.data);
+      // Auto-mapping
+      const newMapping: Record<string, string> = {};
+      let allRequiredFound = true;
+      for (const f of fields) {
+        const found = head.find(
+          (h) => h.toLowerCase() === f.key.toLowerCase() || h.toLowerCase() === f.label.toLowerCase()
+        );
+        if (found) newMapping[f.key] = found;
+        else if (f.required) allRequiredFound = false;
+      }
+      setMapping(newMapping);
+      setShowMapping(!allRequiredFound);
+      fileInputRef.current!.value = ""; // reset input
+    };
+    reader.readAsText(file);
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -189,27 +195,30 @@ export default function ImportPage() {
     setError("");
     setImportProgress(0);
 
-    const progressInterval = setInterval(() => {
-      setImportProgress((prev) => {
-        if (prev === null) return null;
-        // Avança rápido no começo, depois vai mais devagar, parando no 95%
-        const inc = prev < 50 ? Math.floor(Math.random() * 15) + 5 : Math.floor(Math.random() * 5) + 1;
-        const next = prev + inc;
-        return next > 95 ? 95 : next;
-      });
-    }, 300);
+    const mRows = mappedRows();
+    const chunkSize = 20;
+    let created = 0, skipped = 0, errors: any[] = [];
 
     try {
-      const r = await api<ImportResult>("/import/commit", {
-        method: "POST",
-        body: { rows: mappedRows() },
-      });
+      for (let i = 0; i < mRows.length; i += chunkSize) {
+        const chunk = mRows.slice(i, i + chunkSize);
+        const r = await api<ImportResult>("/import/commit", {
+          method: "POST",
+          body: { rows: chunk },
+        });
+        
+        created += r.created;
+        skipped += r.skipped;
+        errors.push(...r.errors.map((e: any) => ({ ...e, index: e.index + i })));
+        
+        const currentProgress = Math.round(((i + chunk.length) / mRows.length) * 100);
+        setImportProgress(currentProgress > 100 ? 100 : currentProgress);
+      }
       
       setImportProgress(100);
       
-      // Aguarda meio segundo no 100% para o usuário ver antes de fechar
       setTimeout(() => {
-        setResult(r);
+        setResult({ created, skipped, errors });
         setImportProgress(null);
         setBusy(false);
       }, 600);
@@ -218,8 +227,6 @@ export default function ImportPage() {
       setError(err.message);
       setImportProgress(null);
       setBusy(false);
-    } finally {
-      clearInterval(progressInterval);
     }
   }
 
@@ -269,16 +276,16 @@ export default function ImportPage() {
         <div className="p-6">
           {/* Drop zone */}
           <div
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => { if (rows.length === 0) fileInputRef.current?.click(); }}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${
               dragOver
                 ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
                 : rows.length > 0
-                ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/10"
-                : "border-slate-300 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/10 cursor-default"
+                : "border-slate-300 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer"
             }`}
           >
             <input
@@ -295,14 +302,47 @@ export default function ImportPage() {
                 </div>
                 <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{fileName}</div>
                 <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                  {rows.length} linha(s) · {headers.length} coluna(s) detectadas
+                  {rows.length} itens prontos para subir
                 </div>
-                <button
-                  className="mt-2 text-xs text-slate-400 hover:text-blue-500 underline"
-                  onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                >
-                  Trocar arquivo
-                </button>
+                
+                {!validation && !result && (
+                  <div className="flex flex-col sm:flex-row items-center gap-3 mt-4">
+                    <button
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                      onClick={(e) => { e.stopPropagation(); validar(); }}
+                      disabled={busy || !requiredMapped}
+                    >
+                      <i className={`ti ${busy ? "ti-loader-2 animate-spin" : "ti-checks"} text-sm`}></i>
+                      Validar
+                    </button>
+                    <button
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                      onClick={(e) => { e.stopPropagation(); importar(); }}
+                      disabled={busy || !requiredMapped}
+                    >
+                      <i className={`ti ${busy ? "ti-loader-2 animate-spin" : "ti-database-import"} text-sm`}></i>
+                      Importar Agora
+                    </button>
+                  </div>
+                )}
+
+                {!validation && !result && (
+                  <div className="flex items-center gap-4 mt-2">
+                    <button
+                      className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1"
+                      onClick={(e) => { e.stopPropagation(); setShowMapping(!showMapping); }}
+                    >
+                      <i className={`ti ${showMapping ? "ti-chevron-up" : "ti-chevron-down"}`}></i>
+                      {showMapping ? "Ocultar colunas" : "Ver colunas"}
+                    </button>
+                    <button
+                      className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"
+                      onClick={(e) => { e.stopPropagation(); setRows([]); setHeaders([]); setMapping({}); }}
+                    >
+                      <i className="ti ti-trash"></i> Cancelar
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
@@ -322,8 +362,8 @@ export default function ImportPage() {
       </div>
 
       {/* Passo 2: mapeamento */}
-      {headers.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+      {headers.length > 0 && showMapping && !validation && !result && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
@@ -389,30 +429,11 @@ export default function ImportPage() {
             </div>
 
             {!requiredMapped && (
-              <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 rounded-lg">
+              <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 rounded-lg mt-4">
                 <i className="ti ti-alert-triangle text-sm"></i>
-                Mapeie todos os campos obrigatórios antes de prosseguir.
+                Mapeie todos os campos obrigatórios para liberar a importação.
               </div>
             )}
-
-            <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-                onClick={validar}
-                disabled={busy || !requiredMapped}
-              >
-                <i className={`ti ${busy ? "ti-loader-2 animate-spin" : "ti-checks"} text-sm`}></i>
-                Validar dados
-              </button>
-              <button
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
-                onClick={importar}
-                disabled={busy || !requiredMapped}
-              >
-                <i className={`ti ${busy ? "ti-loader-2 animate-spin" : "ti-database-import"} text-sm`}></i>
-                {busy ? "Processando..." : "Importar agora"}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -532,7 +553,7 @@ export default function ImportPage() {
 
       {/* Loading animado de importação Full Screen */}
       {importProgress !== null && (
-        <div className="fixed inset-0 z-[9999] bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6">
+        <div className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-md flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-md flex flex-col items-center">
             {/* Ícone e Spinner */}
             <div className="mb-10 relative">
