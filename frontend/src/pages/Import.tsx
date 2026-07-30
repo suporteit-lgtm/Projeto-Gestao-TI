@@ -525,6 +525,10 @@ export default function ImportPage() {
                 ))}
               </ul>
             </details>
+          )}
+        </div>
+      )}
+
       <Modal open={confirmOpen} title="Confirmar importação" onClose={() => setConfirmOpen(false)}>
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-400">
