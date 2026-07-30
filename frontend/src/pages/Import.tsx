@@ -1,6 +1,7 @@
 // Importação inicial do inventário a partir de um CSV (ex.: export do Google Sheets).
 // Fluxo: 1) ler arquivo  2) mapear colunas  3) validar  4) importar.
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Papa from "papaparse";
 import { api } from "../api/client";
 import { Alert, Modal } from "../components/ui";
@@ -536,6 +537,201 @@ export default function ImportPage() {
           </p>
           <div className="flex justify-end gap-3 pt-2">
             <button
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                  <i className={`ti ti-upload text-slate-400 text-2xl ${dragOver ? "text-blue-500" : ""}`}></i>
+                </div>
+                <div>
+                  <p className="font-medium text-slate-700 dark:text-slate-300 text-sm">
+                    Arraste o CSV aqui ou clique para selecionar
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">Suporte a arquivos exportados do Google Sheets e Excel</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Passo 2: mapeamento */}
+      {headers.length > 0 && showMapping && !validation && !result && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                <i className="ti ti-table-column text-violet-500 text-lg"></i>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Passo 2 — Mapeamento de colunas</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">{mappedCount} de {fields.length} campos mapeados</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Progress bar */}
+              <div className="w-24 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full bg-violet-500 rounded-full transition-all duration-300"
+                  style={{ width: `${(mappedCount / fields.length) * 100}%` }}
+                />
+              </div>
+              <span className="text-xs text-slate-400 font-mono">{Math.round((mappedCount / fields.length) * 100)}%</span>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="grid sm:grid-cols-2 gap-3">
+              {fields.map((f) => {
+                const mapped = !!mapping[f.key];
+                return (
+                  <div
+                    key={f.key}
+                    className={`rounded-xl border p-3 transition-colors ${
+                      mapped
+                        ? "border-violet-200 dark:border-violet-800/60 bg-violet-50 dark:bg-violet-900/10"
+                        : f.required
+                        ? "border-red-200 dark:border-red-900/60 bg-red-50/50 dark:bg-red-900/10"
+                        : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        {f.label}
+                      </span>
+                      {f.required && (
+                        <span className="text-[10px] font-bold text-red-500 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded">
+                          obrigatório
+                        </span>
+                      )}
+                    </div>
+                    <select
+                      className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                      value={mapping[f.key] ?? ""}
+                      onChange={(e) => setMapping({ ...mapping, [f.key]: e.target.value })}
+                    >
+                      <option value="">— ignorar —</option>
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+
+            {!requiredMapped && (
+              <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 rounded-lg mt-4">
+                <i className="ti ti-alert-triangle text-sm"></i>
+                Mapeie todos os campos obrigatórios para liberar a importação.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Resultado da validação */}
+      {validation && !result && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${invalidCount > 0 ? "bg-amber-500/10" : "bg-emerald-500/10"}`}>
+              <i className={`ti ${invalidCount > 0 ? "ti-alert-triangle text-amber-500" : "ti-circle-check text-emerald-500"} text-lg`}></i>
+            </div>
+            <div>
+              <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Passo 3 — Resultado da validação</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">{validation.length - invalidCount} válido(s)</span>
+                {invalidCount > 0 && (
+                  <> · <span className="text-red-600 dark:text-red-400 font-medium">{invalidCount} com problema</span></>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {invalidCount > 0 && (
+            <div className="p-6">
+              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      <th className="text-left px-4 py-2.5">Linha</th>
+                      <th className="text-left px-4 py-2.5">ID do Ativo</th>
+                      <th className="text-left px-4 py-2.5">Problemas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {validation
+                      .filter((v) => !v.ok)
+                      .map((v) => (
+                        <tr key={v.index} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400 font-mono text-xs">{v.index + 2}</td>
+                          <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300 font-mono text-xs">{v.assetId || "—"}</td>
+                          <td className="px-4 py-2.5 text-red-600 dark:text-red-400 text-xs">{v.errors.join(" ")}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Resultado da importação */}
+      {result && (
+        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-900/10 p-6 space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+              <i className="ti ti-circle-check text-emerald-500 text-2xl"></i>
+            </div>
+            <div>
+              <h3 className="font-semibold text-emerald-800 dark:text-emerald-300">Importação concluída com sucesso!</h3>
+              <div className="flex gap-4 mt-2">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{result.created}</div>
+                  <div className="text-xs text-emerald-600 dark:text-emerald-500">criado(s)</div>
+                </div>
+                <div className="w-px bg-emerald-200 dark:bg-emerald-800" />
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{result.skipped}</div>
+                  <div className="text-xs text-amber-600 dark:text-amber-500">ignorado(s)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {result.errors.length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 list-none flex items-center gap-1.5">
+                <i className="ti ti-chevron-right text-sm transition-transform [[open]_&]:rotate-90"></i>
+                Ver {result.errors.length} item(s) ignorado(s)
+              </summary>
+              <ul className="mt-3 space-y-1 pl-5">
+                {result.errors.map((e, i) => (
+                  <li key={i} className="text-xs text-slate-500 dark:text-slate-400">
+                    <span className="font-mono">Linha {e.index + 2}</span>
+                    {e.assetId && <span className="ml-1 text-slate-400">({e.assetId})</span>}:
+                    <span className="ml-1 text-red-500">{e.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+      <Modal open={confirmOpen} title="Confirmar importação" onClose={() => setConfirmOpen(false)}>
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Você está prestes a importar <strong className="text-slate-800 dark:text-slate-200">{rows.length} linha(s)</strong>.
+            Itens com ID já existente no sistema serão ignorados.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
               className="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               onClick={() => setConfirmOpen(false)}
             >
@@ -552,7 +748,7 @@ export default function ImportPage() {
       </Modal>
 
       {/* Loading animado de importação Full Screen */}
-      {importProgress !== null && (
+      {importProgress !== null && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-md flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-md flex flex-col items-center">
             {/* Ícone e Spinner */}
@@ -588,7 +784,8 @@ export default function ImportPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
