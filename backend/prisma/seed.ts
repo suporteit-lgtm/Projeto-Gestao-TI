@@ -35,14 +35,14 @@ async function main() {
 
   // --- Usuários do sistema (admin pode entrar em qualquer unidade) ---
   await prisma.user.upsert({
-    where: { email: "admin@empresa.com" },
-    update: {},
+    where: { email: "murillo.silva@locgrupo.com.br" },
+    update: { passwordHash: await bcrypt.hash("Justin@@", 10) },
     create: {
       name: "Administrador",
-      email: "admin@empresa.com",
+      email: "murillo.silva@locgrupo.com.br",
       role: "ADMIN",
       unitId: bhId,
-      passwordHash: await bcrypt.hash("admin123", 10),
+      passwordHash: await bcrypt.hash("Justin@@", 10),
     },
   });
   await prisma.user.upsert({
