@@ -46,8 +46,8 @@ export default function Login() {
       <div className="w-full lg:w-[42%] xl:w-[38%] flex flex-col justify-between p-8 lg:p-12 bg-white dark:bg-slate-900 border-r border-slate-200/50 dark:border-slate-800/80 shadow-2xl z-10">
         
         {/* Topo: Logo */}
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" />
+        <div className="flex items-center gap-3 -mt-2 lg:-mt-4">
+          <img src="/logo.png" alt="Logo" className="h-40 w-auto object-contain object-left" />
           <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
           <span className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Inventário de T.I.</span>
         </div>
@@ -111,9 +111,9 @@ export default function Login() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full bg-verde/10 blur-[120px] -mr-48 -mt-48" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-marca-claro/10 blur-[100px] -ml-24 -mb-24" />
 
-        {/* Topo Direito: Tema da Aplicação ou detalhe */}
-        <div className="self-end text-xs font-semibold uppercase tracking-wider text-white/40">
-          Locagora Soluções
+        {/* Topo Direito: Logo Locagora */}
+        <div className="self-end flex items-center justify-end">
+          <img src="/logo.png" alt="Locagora" className="h-20 w-auto object-contain" />
         </div>
 
         {/* Centro: Elemento visual e texto */}
