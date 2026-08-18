@@ -3,7 +3,11 @@ const TOKEN_KEY = "inventario_token";
 
 // Em produção usa VITE_API_URL (ex: https://api.seudominio.com.br/api)
 // Em desenvolvimento usa /api (proxy do Vite)
-const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const envApiUrl = import.meta.env.VITE_API_URL;
+let BASE_URL = "/api";
+if (envApiUrl) {
+  BASE_URL = envApiUrl.endsWith("/api") ? envApiUrl : `${envApiUrl.replace(/\/$/, "")}/api`;
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
