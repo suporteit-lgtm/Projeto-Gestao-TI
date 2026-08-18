@@ -33,11 +33,13 @@ model User {
   active       Boolean  @default(true)
   // Unidade (tenant) em que o usuário trabalha. Comum só entra na dele; admin
   // pode entrar em qualquer uma.
-  unitId       String?
-  unit         Unit?    @relation(fields: [unitId], references: [id])
-  lastUnitId   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  unitId         String?
+  unit           Unit?    @relation(fields: [unitId], references: [id])
+  lastUnitId     String?
+  allowedUnitIds String[] @default([]) // Compatibilidade com o App Mobile
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([unitId])
 }
