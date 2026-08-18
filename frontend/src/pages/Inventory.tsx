@@ -6,6 +6,7 @@ import { Equipment } from "../types";
 import { StatusBadge, ConditionBadge, Modal, Spinner, Alert } from "../components/ui";
 import EquipmentForm from "../components/EquipmentForm";
 import AssignModal from "../components/AssignModal";
+import PDFModal from "../components/PDFModal";
 import { formatMoney } from "../lib/format";
 import { useData } from "../context/DataContext";
 
@@ -52,6 +53,7 @@ export default function Inventory() {
   const [assigning, setAssigning] = useState<Equipment | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Equipment | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [termoCollab, setTermoCollab] = useState<Collaborator | null>(null);
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
@@ -531,7 +533,7 @@ export default function Inventory() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={() => download(`/documents/person/termo.pdf?nome=${encodeURIComponent(collab.name)}`, `termo-${collab.name}.pdf`)}
+                            onClick={() => setTermoCollab(collab)}
                             title="Gerar Termo de Responsabilidade (Todos os itens)"
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-medium text-xs transition-colors border border-emerald-200 dark:border-emerald-800/60"
                           >
@@ -682,6 +684,23 @@ export default function Inventory() {
           equipment={assigning}
           onClose={() => setAssigning(null)}
           onDone={() => { setAssigning(null); reload(); }}
+        />
+      )}
+
+      {/* Modal do Termo de Responsabilidade (Colaborador) */}
+      {termoCollab && (
+        <PDFModal
+          open={!!termoCollab}
+          onClose={() => setTermoCollab(null)}
+          htmlPath={`/documents/person/termo.html?nome=${encodeURIComponent(termoCollab.name)}`}
+          filename={`termo-${termoCollab.name}.pdf`}
+          signers={[{
+            name: termoCollab.name,
+            email: termoCollab.equipments[0]?.userEmail || "",
+            documentation: termoCollab.equipments[0]?.userCpf || undefined,
+            sign_as: "sign",
+          }]}
+          pasta={termoCollab.name}
         />
       )}
     </div>

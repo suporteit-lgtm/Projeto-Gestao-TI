@@ -107,53 +107,8 @@ async function renderHtml(
   });
 }
 
-// Converte HTML em PDF (A4). Em produção/serverless usa @sparticuz/chromium;
-// em desenvolvimento usa o puppeteer local.
-async function htmlToPdf(html: string): Promise<Buffer> {
-  let browser;
-  const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
-
-  if (isServerless) {
-    // Ambiente serverless (Vercel Node 20+): usa chromium-min com pacote tar remoto.
-    const chromium = await import("@sparticuz/chromium-min").then((m) => m.default);
-    const puppeteerCore = await import("puppeteer-core").then((m) => m.default);
-    
-    // O Vercel removeu o libnss3.so no Node 20 (AL2023). O pack remoto resolve isso.
-    const executablePath = await chromium.executablePath(
-      "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"
-    );
-
-    browser = await puppeteerCore.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath,
-      headless: chromium.headless,
-    });
-  } else {
-    // Desenvolvimento local: usa puppeteer completo (com Chromium embutido).
-    const puppeteer = await import("puppeteer").then((m) => m.default);
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-  }
-
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" },
-    });
-    return Buffer.from(pdf);
-  } finally {
-    await browser.close();
-  }
-}
-
 // Termo a partir de UM equipamento (usa o responsável atual do item).
-export async function termoForEquipment(id: string, unitId: string): Promise<Buffer> {
+export async function termoForEquipment(id: string, unitId: string): Promise<{ html: string }> {
   const eq = await prisma.equipment.findUnique({ where: { id }, include: { category: true } });
   if (!eq || eq.unitId !== unitId) throw new AppError("Equipamento não encontrado.", 404);
   if (!eq.currentUserName) {
@@ -172,11 +127,11 @@ export async function termoForEquipment(id: string, unitId: string): Promise<Buf
     },
     empresa
   );
-  return htmlToPdf(html);
+  return { html };
 }
 
 // Termo a partir de UMA PESSOA: junta todos os itens em uso por ela (na unidade).
-export async function termoForPerson(nome: string, unitId: string): Promise<Buffer> {
+export async function termoForPerson(nome: string, unitId: string): Promise<{ html: string }> {
   const equipamentos = await prisma.equipment.findMany({
     where: { currentUserName: nome, status: "EM_USO", unitId },
     include: { category: true },
@@ -197,5 +152,5 @@ export async function termoForPerson(nome: string, unitId: string): Promise<Buff
     },
     empresa
   );
-  return htmlToPdf(html);
+  return { html };
 }

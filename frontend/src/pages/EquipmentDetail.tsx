@@ -1,11 +1,12 @@
 // Ficha completa de um equipamento: dados, histórico de responsáveis e termo.
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, openPdf } from "../api/client";
+import { api } from "../api/client";
 import { Equipment } from "../types";
 import { StatusBadge, ConditionBadge, Modal, Spinner, Alert } from "../components/ui";
 import EquipmentForm from "../components/EquipmentForm";
 import AssignModal from "../components/AssignModal";
+import PDFModal from "../components/PDFModal";
 import { formatDate, formatMoney, isPhoneCategory, OWNERSHIP_LABEL } from "../lib/format";
 import { useData } from "../context/DataContext";
 
@@ -22,6 +23,7 @@ export default function EquipmentDetail() {
   const [eq, setEq] = useState<Equipment | null>(null);
   const [editing, setEditing] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [termoModalOpen, setTermoModalOpen] = useState(false);
   const [error, setError] = useState("");
 
   async function load() {
@@ -32,13 +34,8 @@ export default function EquipmentDetail() {
     load();
   }, [id]);
 
-  async function gerarTermo() {
-    setError("");
-    try {
-      await openPdf(`/documents/equipment/${id}/termo.pdf`);
-    } catch (err: any) {
-      setError(err.message);
-    }
+  function gerarTermo() {
+    setTermoModalOpen(true);
   }
 
   async function devolver() {
@@ -209,6 +206,28 @@ export default function EquipmentDetail() {
             setAssigning(false);
             load();
           }}
+        />
+      )}
+
+      {termoModalOpen && (
+        <PDFModal
+          open={termoModalOpen}
+          onClose={() => setTermoModalOpen(false)}
+          htmlPath={`/documents/equipment/${id}/termo.html`}
+          filename={`termo-${eq.assetId}.pdf`}
+          signers={
+            eq.currentUserName && eq.userEmail
+              ? [
+                  {
+                    name: eq.currentUserName,
+                    email: eq.userEmail,
+                    documentation: eq.userCpf || undefined,
+                    sign_as: "sign",
+                  },
+                ]
+              : undefined
+          }
+          pasta={eq.currentUserName || "Geral"}
         />
       )}
     </div>
