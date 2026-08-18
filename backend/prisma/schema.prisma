@@ -99,6 +99,12 @@ model Equipment {
   imei1        String? // IMEI 1
   imei2        String? // IMEI 2
   macAddress   String? // Endereço MAC
+  operadora    String? // Operadora
+  plano        String? // Plano
+  portabilidade String? // Portabilidade (Sim/Não)
+  iccid        String? // ICCID do Chip
+  telefone     String? // Número do Telefone
+  previousUserName String? // Usuário Antigo (para compatibilidade com App)
 
   // Responsável atual (preenchido quando status = EM_USO)
   currentUserName  String? // Usuário Atual
