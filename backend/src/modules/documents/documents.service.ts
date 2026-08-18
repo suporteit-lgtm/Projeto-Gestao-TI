@@ -114,14 +114,20 @@ async function htmlToPdf(html: string): Promise<Buffer> {
   const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
   if (isServerless) {
-    // Ambiente serverless (Vercel): usa chromium headless compacto.
-    const chromium = await import("@sparticuz/chromium").then((m) => m.default);
+    // Ambiente serverless (Vercel Node 20+): usa chromium-min com pacote tar remoto.
+    const chromium = await import("@sparticuz/chromium-min").then((m) => m.default);
     const puppeteerCore = await import("puppeteer-core").then((m) => m.default);
+    
+    // O Vercel removeu o libnss3.so no Node 20 (AL2023). O pack remoto resolve isso.
+    const executablePath = await chromium.executablePath(
+      "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"
+    );
+
     browser = await puppeteerCore.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: true,
+      executablePath,
+      headless: chromium.headless,
     });
   } else {
     // Desenvolvimento local: usa puppeteer completo (com Chromium embutido).
