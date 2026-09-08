@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Papa from "papaparse";
-import { api } from "../api/client";
+import { api, download } from "../api/client";
 import { Alert, Modal } from "../components/ui";
 
 interface ImportField {
@@ -54,6 +54,12 @@ const ALIASES: Record<string, string> = {
   imei2: "imei2",
   "endereco mac": "macAddress",
   mac: "macAddress",
+  operadora: "operadora",
+  plano: "plano",
+  portabilidade: "portabilidade",
+  iccid: "iccid",
+  "numero de telefone": "telefone",
+  telefone: "telefone",
   "cpf do usuario": "userCpf",
   cpf: "userCpf",
   "numero de patrmonio": "assetTag",
@@ -107,6 +113,7 @@ export default function ImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [baixandoModelo, setBaixandoModelo] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
@@ -168,6 +175,18 @@ export default function ImportPage() {
       }
       return out;
     });
+  }
+
+  async function baixarModelo() {
+    setBaixandoModelo(true);
+    setError("");
+    try {
+      await download("/import/modelo", "modelo-importacao.csv");
+    } catch (err: any) {
+      setError(err.message ?? "Não foi possível baixar a planilha modelo.");
+    } finally {
+      setBaixandoModelo(false);
+    }
   }
 
   async function validar() {
@@ -272,6 +291,18 @@ export default function ImportPage() {
             <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Passo 1 — Selecione o arquivo CSV</div>
             <div className="text-xs text-slate-500 dark:text-slate-400">Formatos suportados: .csv (separado por vírgula ou ponto e vírgula)</div>
           </div>
+
+          {/* Planilha modelo: já vem com todas as colunas aceitas e exemplos. */}
+          <button
+            type="button"
+            onClick={baixarModelo}
+            disabled={baixandoModelo}
+            title="Baixa um CSV com todas as colunas aceitas e duas linhas de exemplo"
+            className="ml-auto shrink-0 flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+          >
+            <i className={`ti ${baixandoModelo ? "ti-loader-2 animate-spin" : "ti-download"} text-sm`}></i>
+            {baixandoModelo ? "Baixando..." : "Baixar planilha modelo"}
+          </button>
         </div>
 
         <div className="p-6">

@@ -6,8 +6,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Category, Equipment, MetaOption } from "../types";
-import { toDateInput, isPhoneCategory } from "../lib/format";
-import { maskCPF, maskIMEI, maskMAC, maskMoneyBR, parseMoneyBR } from "../lib/masks";
+import { toDateInput, isPhoneCategory, isLineCategory } from "../lib/format";
+import {
+  maskCPF,
+  maskICCID,
+  maskIMEI,
+  maskMAC,
+  maskMoneyBR,
+  maskPhoneBR,
+  parseMoneyBR,
+} from "../lib/masks";
+import { useAuth } from "../context/AuthContext";
 import { Alert } from "./ui";
 import CategoryManagerModal from "./CategoryManagerModal";
 
@@ -39,6 +48,12 @@ function emptyForm() {
     imei1: "",
     imei2: "",
     macAddress: "",
+    operadora: "",
+    plano: "",
+    portabilidade: "",
+    iccid: "",
+    telefone: "",
+    previousUserName: "",
     supplier: "",
     location: "",
     currentUserName: "",
@@ -70,6 +85,7 @@ export default function EquipmentForm({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
+  const { user } = useAuth();
   const errorRef = useRef<HTMLDivElement | null>(null);
 
   // O botão Salvar fica no fim de um formulário longo: quando o cadastro é
@@ -96,6 +112,12 @@ export default function EquipmentForm({
         imei1: equipment.imei1 ?? "",
         imei2: equipment.imei2 ?? "",
         macAddress: equipment.macAddress ?? "",
+        operadora: equipment.operadora ?? "",
+        plano: equipment.plano ?? "",
+        portabilidade: equipment.portabilidade ?? "",
+        iccid: equipment.iccid ?? "",
+        telefone: equipment.telefone ?? "",
+        previousUserName: equipment.previousUserName ?? "",
         supplier: equipment.supplier ?? "",
         location: equipment.location ?? "",
         currentUserName: equipment.currentUserName ?? "",
@@ -126,6 +148,8 @@ export default function EquipmentForm({
     [categories, form.categoryId]
   );
   const isPhone = isPhoneCategory(selectedCategoryName);
+  // Linha corporativa: chip/plano, não é um aparelho. Tem formulário próprio.
+  const isLine = isLineCategory(selectedCategoryName);
 
   // Abre o popup de gerenciamento de categorias (adicionar/renomear/remover).
   function abrirCategorias() {
@@ -169,6 +193,23 @@ export default function EquipmentForm({
         value={(form as any)[name]}
         onChange={(e) => set(name, opts.mask ? opts.mask(e.target.value) : e.target.value)}
       />
+    </div>
+  );
+
+  const selectDe = (
+    label: string,
+    name: "status" | "condition",
+    options: MetaOption[]
+  ) => (
+    <div>
+      <label className="label">{label}</label>
+      <select className="input" value={form[name]} onChange={(e) => set(name, e.target.value)}>
+        {options.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 
@@ -243,6 +284,71 @@ export default function EquipmentForm({
         </div>
       </div>
 
+      {/* Linha corporativa tem um conjunto de campos próprio; os demais
+          tipos seguem o formulário de equipamento. */}
+      {isLine ? (
+        <>
+          <Alert kind="info">
+            Categoria de linha corporativa: mostrando os campos da linha (operadora, plano,
+            portabilidade, ICCID e número). Marca, modelo e série não se aplicam.
+          </Alert>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Unidade</label>
+              <input
+                className="input bg-gray-100 text-gray-500"
+                value={user?.unitName ?? "—"}
+                readOnly
+                disabled
+              />
+              <p className="text-xs text-gray-400 mt-1">A linha é cadastrada na unidade ativa.</p>
+            </div>
+            {field("Operadora", "operadora", { placeholder: "Ex.: Vivo, Claro, TIM" })}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {field("Plano", "plano", { placeholder: "Ex.: Controle 20GB" })}
+            {simNao("Portabilidade", "portabilidade")}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {field("ICCID", "iccid", { mask: maskICCID, placeholder: "19 a 20 dígitos" })}
+            {field("Número de Telefone", "telefone", {
+              mask: maskPhoneBR,
+              placeholder: "(00) 00000-0000",
+            })}
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            {selectDe("Status do Ativo", "status", statusOptions)}
+            {selectDe("Condição", "condition", conditionOptions)}
+            {field("Fornecedor", "supplier")}
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="text-sm font-semibold text-gray-600 mb-2">Responsável pela linha</div>
+            <div className="grid grid-cols-2 gap-4">
+              {field("Usuário Antigo", "previousUserName")}
+              {field("Usuário Atual", "currentUserName")}
+              {field("Departamento", "department")}
+              {field("Gestor", "manager")}
+              {field("E-mail do Usuário", "userEmail", { type: "email" })}
+              {field("CPF do Usuário", "userCpf", { mask: maskCPF, placeholder: "000.000.000-00" })}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Ao mudar o "Usuário Atual", o sistema registra a troca no histórico automaticamente.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {field("Data de Aquisição", "acquisitionDate", { type: "date" })}
+            {field("Data de Entrega ao Usuário", "deliveryDate", { type: "date" })}
+          </div>
+
+        </>
+      ) : (
+        <>
       {isPhone && (
         <Alert kind="info">Categoria de celular: mostrando campos específicos (IMEI, MAC, película, capa, CPF).</Alert>
       )}
@@ -280,26 +386,8 @@ export default function EquipmentForm({
       )}
 
       <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label className="label">Status do Ativo</label>
-          <select className="input" value={form.status} onChange={(e) => set("status", e.target.value)}>
-            {statusOptions.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Condição</label>
-          <select className="input" value={form.condition} onChange={(e) => set("condition", e.target.value)}>
-            {conditionOptions.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {selectDe("Status do Ativo", "status", statusOptions)}
+        {selectDe("Condição", "condition", conditionOptions)}
         <div>
           <label className="label">Propriedade</label>
           <select className="input" value={form.ownership} onChange={(e) => set("ownership", e.target.value)}>
@@ -368,6 +456,9 @@ export default function EquipmentForm({
           placeholder="Ex.: defeitos, riscos, tela com mancha, bateria fraca..."
         />
       </div>
+
+        </>
+      )}
 
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>

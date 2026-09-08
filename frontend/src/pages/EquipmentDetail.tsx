@@ -7,7 +7,13 @@ import { StatusBadge, ConditionBadge, Modal, Spinner, Alert } from "../component
 import EquipmentForm from "../components/EquipmentForm";
 import AssignModal from "../components/AssignModal";
 import PDFModal from "../components/PDFModal";
-import { formatDate, formatMoney, isPhoneCategory, OWNERSHIP_LABEL } from "../lib/format";
+import {
+  formatDate,
+  formatMoney,
+  isPhoneCategory,
+  isLineCategory,
+  OWNERSHIP_LABEL,
+} from "../lib/format";
 import { useData } from "../context/DataContext";
 
 export default function EquipmentDetail() {
@@ -92,6 +98,20 @@ export default function EquipmentDetail() {
       <div className="grid md:grid-cols-3 gap-4">
         {/* Dados do equipamento */}
         <div className="card p-5 md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {isLineCategory(eq.category?.name) ? (
+            <>
+              <Info label="Operadora" value={eq.operadora} />
+              <Info label="Plano" value={eq.plano} />
+              <Info label="Portabilidade" value={eq.portabilidade} />
+              <Info label="ICCID" value={eq.iccid} />
+              <Info label="Número de Telefone" value={eq.telefone} />
+              <Info label="Fornecedor" value={eq.supplier} />
+              <Info label="Usuário Antigo" value={eq.previousUserName} />
+              <Info label="Aquisição" value={formatDate(eq.acquisitionDate)} />
+              <Info label="Entrega ao usuário" value={formatDate(eq.deliveryDate)} />
+            </>
+          ) : (
+            <>
           <Info label="Marca" value={eq.brand} />
           <Info label="Modelo" value={eq.model} />
           <Info label="Cor" value={eq.color} />
@@ -120,6 +140,8 @@ export default function EquipmentDetail() {
             <>
               <Info label="Garantia (final)" value={formatDate(eq.warrantyEndDate)} />
               <Info label="Última conferência" value={formatDate(eq.lastCheckDate)} />
+            </>
+          )}
             </>
           )}
         </div>

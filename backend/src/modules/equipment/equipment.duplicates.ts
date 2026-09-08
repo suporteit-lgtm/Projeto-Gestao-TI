@@ -6,9 +6,11 @@
 // equipamentos diferentes, e não uma duplicata.
 import { AppError } from "../../middlewares/error";
 
-// Comparação tolerante à formatação: "sn-123 456" e "SN123456" são o mesmo.
+// Comparação tolerante à formatação: descarta tudo que não é letra ou dígito,
+// então "sn-123 456" e "SN123456" são o mesmo número de série, e
+// "(11) 99999-8888" é o mesmo telefone que "11999998888".
 function normalizeIdentifier(value?: string | null): string {
-  return (value ?? "").replace(/[\s.\-\/:]/g, "").toUpperCase();
+  return (value ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
 }
 
 // Grupos de campos que representam o mesmo identificador. IMEI 1 e IMEI 2
@@ -18,9 +20,20 @@ const IDENTIFIER_GROUPS = [
   { label: "Número de Patrimônio", fields: ["assetTag"] },
   { label: "IMEI", fields: ["imei1", "imei2"] },
   { label: "Endereço MAC", fields: ["macAddress"] },
+  // Linha corporativa: o chip e o número identificam a linha.
+  { label: "ICCID", fields: ["iccid"] },
+  { label: "Número de Telefone", fields: ["telefone"] },
 ] as const;
 
-const IDENTIFIER_FIELDS = ["serialNumber", "assetTag", "imei1", "imei2", "macAddress"] as const;
+const IDENTIFIER_FIELDS = [
+  "serialNumber",
+  "assetTag",
+  "imei1",
+  "imei2",
+  "macAddress",
+  "iccid",
+  "telefone",
+] as const;
 
 export type IdentifierFields = {
   [K in (typeof IDENTIFIER_FIELDS)[number]]?: string | null;
@@ -37,6 +50,8 @@ export const DUPLICATE_SELECT = {
   imei1: true,
   imei2: true,
   macAddress: true,
+  iccid: true,
+  telefone: true,
 } as const;
 
 export interface ExistingEquipment extends IdentifierFields {

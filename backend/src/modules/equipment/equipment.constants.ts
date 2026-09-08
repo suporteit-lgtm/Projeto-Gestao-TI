@@ -37,6 +37,14 @@ export function isPhoneCategoryName(name?: string | null): boolean {
   return /celular|telefone|smartphone|phone|iphone/i.test(name);
 }
 
+// Detecta se uma categoria e de LINHA CORPORATIVA (chip/plano de telefonia).
+// A linha nao e um aparelho: os campos relevantes sao operadora, plano, ICCID
+// e numero, e nao marca/modelo/serie.
+export function isLineCategoryName(name?: string | null): boolean {
+  if (!name) return false;
+  return /linha|chip|sim.?card/i.test(name);
+}
+
 export function ownershipFromLabel(label: string): OwnershipKey | null {
   const v = label.trim().toLowerCase();
   const entry = Object.entries(OWNERSHIP).find(([, l]) => l.toLowerCase() === v);

@@ -8,13 +8,37 @@ const optionalString = z
   .optional()
   .transform((v) => (v === "" || v === undefined ? undefined : v));
 
+// Datas do sistema são "data pura" (sem hora) e ficam gravadas à meia-noite
+// UTC, para não deslocarem de um dia conforme o fuso de quem lê ou do servidor.
+// Aceita "aaaa-mm-dd" (input type=date) e "dd/mm/aaaa".
+function parsePureDate(value: string): Date | null {
+  const v = value.trim();
+
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const [, y, m, d] = iso;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  }
+
+  const br = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (br) {
+    const [, d, m, y] = br;
+    const year = y.length === 2 ? 2000 + Number(y) : Number(y);
+    return new Date(Date.UTC(year, Number(m) - 1, Number(d)));
+  }
+
+  const qualquer = new Date(v);
+  return isNaN(qualquer.getTime()) ? null : qualquer;
+}
+
 const optionalDate = z
   .union([z.string(), z.date(), z.null()])
   .optional()
   .transform((v) => {
     if (v === "" || v === null || v === undefined) return null;
-    const d = v instanceof Date ? v : new Date(v);
-    return isNaN(d.getTime()) ? null : d;
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+    const d = parsePureDate(v);
+    return d && !isNaN(d.getTime()) ? d : null;
   });
 
 const optionalNumber = z
@@ -48,6 +72,13 @@ const baseShape = {
   imei1: optionalString,
   imei2: optionalString,
   macAddress: optionalString,
+  // Campos específicos de LINHA CORPORATIVA (chip/plano).
+  operadora: optionalString,
+  plano: optionalString,
+  portabilidade: optionalString,
+  iccid: optionalString,
+  telefone: optionalString,
+  previousUserName: optionalString,
   currentUserName: optionalString,
   department: optionalString,
   manager: optionalString,

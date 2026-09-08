@@ -33,8 +33,9 @@ export async function resetTemplate() {
   });
 }
 
+// Datas puras (aquisição, entrega...) são lidas em UTC, como estão gravadas.
 function fmtDate(d: Date | null): string {
-  return d ? new Date(d).toLocaleDateString("pt-BR") : "";
+  return d ? new Date(d).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "";
 }
 
 // Transforma um equipamento (com categoria) no formato esperado pelo template.
@@ -62,10 +63,21 @@ const MESES = [
 ];
 
 // Data por extenso: ex. "01 de julho de 2026".
+const FUSO_BR = "America/Sao_Paulo";
+
+// "Hoje" no fuso do Brasil. O servidor roda em UTC, então usar a data local dele
+// imprimia o dia seguinte no termo depois das 21h.
+function hojeNoBrasil(): { dia: number; mes: number; ano: number } {
+  const [dia, mes, ano] = new Date()
+    .toLocaleDateString("pt-BR", { timeZone: FUSO_BR })
+    .split("/")
+    .map(Number);
+  return { dia, mes, ano };
+}
+
 function dataExtenso(): string {
-  const d = new Date();
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${dia} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`;
+  const { dia, mes, ano } = hojeNoBrasil();
+  return `${String(dia).padStart(2, "0")} de ${MESES[mes - 1]} de ${ano}`;
 }
 
 // Nome fixo da empresa (usado no termo).
@@ -99,7 +111,7 @@ async function renderHtml(
   const template = await getTemplate();
   const compiled = Handlebars.compile(template.content);
   return compiled({
-    dataAtual: new Date().toLocaleDateString("pt-BR"),
+    dataAtual: new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_BR }),
     dataExtenso: dataExtenso(),
     empresa,
     usuario,

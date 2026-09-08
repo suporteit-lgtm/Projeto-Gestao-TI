@@ -1,6 +1,7 @@
 // Importação inicial do inventário a partir de linhas já mapeadas (chave interna
 // -> valor) enviadas pelo frontend. Faz validação e, no commit, cria os
 // equipamentos e popula o histórico inicial (inclusive a coluna "Usuário Antigo").
+import Papa from "papaparse";
 import { prisma } from "../../config/prisma";
 import {
   STATUS_KEYS,
@@ -22,7 +23,7 @@ import {
 // Campos que o frontend pode mapear. "formerUser" alimenta SÓ o histórico.
 // "assetId" é opcional: se a coluna estiver vazia, o ID é gerado automaticamente.
 export const IMPORT_FIELDS = [
-  { key: "assetId", label: "ID do Ativo (vazio = gera automático)" },
+  { key: "assetId", label: "ID do Ativo (vazio = gera automático)", csvHeader: "ID do Ativo" },
   { key: "category", label: "Tipo / Categoria", required: true },
   { key: "brand", label: "Marca" },
   { key: "model", label: "Modelo" },
@@ -32,16 +33,22 @@ export const IMPORT_FIELDS = [
   { key: "assetTag", label: "Número de Patrimônio" },
   { key: "status", label: "Status do Ativo" },
   { key: "condition", label: "Condição" },
-  { key: "ownership", label: "Propriedade (Próprio/Alugado)" },
+  { key: "ownership", label: "Propriedade (Próprio/Alugado)", csvHeader: "Propriedade" },
   { key: "pelicula", label: "Película" },
   { key: "capa", label: "Capa" },
   { key: "imei1", label: "IMEI 1" },
   { key: "imei2", label: "IMEI 2" },
   { key: "macAddress", label: "Endereço MAC" },
+  // Linha corporativa (chip/plano)
+  { key: "operadora", label: "Operadora" },
+  { key: "plano", label: "Plano" },
+  { key: "portabilidade", label: "Portabilidade" },
+  { key: "iccid", label: "ICCID" },
+  { key: "telefone", label: "Número de Telefone" },
   { key: "supplier", label: "Fornecedor" },
   { key: "location", label: "Localização" },
   { key: "currentUserName", label: "Usuário Atual" },
-  { key: "formerUser", label: "Usuário Antigo (vai p/ histórico)" },
+  { key: "formerUser", label: "Usuário Antigo (vai p/ histórico)", csvHeader: "Usuário Antigo" },
   { key: "department", label: "Departamento" },
   { key: "manager", label: "Gestor" },
   { key: "userEmail", label: "E-mail do Usuário" },
@@ -57,19 +64,102 @@ export const IMPORT_FIELDS = [
 
 type Row = Record<string, string | undefined>;
 
+// ── Planilha modelo ─────────────────────────────────────────────────────────
+// Gerada a partir de IMPORT_FIELDS, então nunca fica desalinhada dos campos que
+// a importação aceita: campo novo na lista = coluna nova no modelo.
+// Os cabeçalhos usam os mesmos nomes que o mapeamento automático reconhece, e
+// as duas linhas de exemplo mostram os dois formatos (equipamento e linha).
+const TEMPLATE_EXAMPLES: Row[] = [
+  {
+    category: "Notebook",
+    brand: "Dell",
+    model: "Latitude 5420",
+    color: "Preto",
+    configuration: "i5 8GB 256GB SSD",
+    serialNumber: "SN123XYZ",
+    assetTag: "PAT-9987",
+    status: "Em uso",
+    condition: "Bom",
+    ownership: "Próprio",
+    supplier: "Fornecedora Alfa",
+    location: "Sede - 2º andar",
+    currentUserName: "João da Silva",
+    formerUser: "Maria Souza",
+    department: "Comercial",
+    manager: "Carla Dias",
+    userEmail: "joao@empresa.com",
+    userCpf: "111.222.333-44",
+    acquisitionDate: "15/03/2024",
+    deliveryDate: "20/03/2024",
+    warrantyEndDate: "15/03/2027",
+    lastCheckDate: "10/01/2026",
+    value: "3.500,00",
+    notes: "Tela com risco leve",
+    accessories: "Carregador, Mouse",
+  },
+  {
+    category: "Linha Corporativa",
+    status: "Em uso",
+    condition: "Bom",
+    operadora: "Vivo",
+    plano: "Controle 20GB",
+    portabilidade: "Sim",
+    iccid: "89550000000000000001",
+    telefone: "(11) 99999-8888",
+    supplier: "Vivo Empresas",
+    currentUserName: "Ana Lima",
+    formerUser: "Pedro Rocha",
+    department: "Financeiro",
+    manager: "Carla Dias",
+    userEmail: "ana@empresa.com",
+    userCpf: "222.333.444-55",
+    acquisitionDate: "10/01/2026",
+    deliveryDate: "01/02/2026",
+  },
+];
+
+// Cabeçalho da coluna no modelo (o label sem a dica entre parênteses).
+function templateHeader(f: (typeof IMPORT_FIELDS)[number]): string {
+  return "csvHeader" in f ? f.csvHeader : f.label;
+}
+
+// Monta o CSV modelo: cabeçalhos + linhas de exemplo. Mesmo separador (";") e
+// BOM do export, para o Excel abrir com os acentos certos.
+export function buildTemplateCsv(): string {
+  const headers = IMPORT_FIELDS.map(templateHeader);
+  const rows = TEMPLATE_EXAMPLES.map((exemplo) => {
+    const linha: Record<string, string> = {};
+    for (const f of IMPORT_FIELDS) linha[templateHeader(f)] = exemplo[f.key] ?? "";
+    return linha;
+  });
+  return "﻿" + Papa.unparse({ fields: headers, data: rows }, { delimiter: ";" });
+}
+
 // Converte data em dd/mm/aaaa, aaaa-mm-dd ou ISO para Date (ou null).
+// Sempre à meia-noite UTC: com o horário local do servidor, a mesma planilha
+// importada em fusos diferentes gravaria dias diferentes.
 function parseDate(value?: string): Date | null {
   if (!value) return null;
   const v = value.trim();
   if (!v) return null;
+
   // dd/mm/aaaa
   const br = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (br) {
     const [, d, m, y] = br;
     const year = y.length === 2 ? 2000 + Number(y) : Number(y);
-    const date = new Date(year, Number(m) - 1, Number(d));
+    const date = new Date(Date.UTC(year, Number(m) - 1, Number(d)));
     return isNaN(date.getTime()) ? null : date;
   }
+
+  // aaaa-mm-dd
+  const iso = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const [, y, m, d] = iso;
+    const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+    return isNaN(date.getTime()) ? null : date;
+  }
+
   const date = new Date(v);
   return isNaN(date.getTime()) ? null : date;
 }
@@ -96,6 +186,8 @@ function rowIdentifiers(row: Row): IdentifierFields {
     imei1: (row.imei1 ?? "").trim() || null,
     imei2: (row.imei2 ?? "").trim() || null,
     macAddress: (row.macAddress ?? "").trim() || null,
+    iccid: (row.iccid ?? "").trim() || null,
+    telefone: (row.telefone ?? "").trim() || null,
   };
 }
 
@@ -275,6 +367,13 @@ export async function commitImport(rows: Row[], unitId: string): Promise<ImportR
             imei1: (row.imei1 ?? "").trim() || null,
             imei2: (row.imei2 ?? "").trim() || null,
             macAddress: (row.macAddress ?? "").trim() || null,
+            operadora: (row.operadora ?? "").trim() || null,
+            plano: (row.plano ?? "").trim() || null,
+            portabilidade: (row.portabilidade ?? "").trim() || null,
+            iccid: (row.iccid ?? "").trim() || null,
+            telefone: (row.telefone ?? "").trim() || null,
+            // "Usuário Antigo" alimenta o campo do cadastro E o histórico.
+            previousUserName: formerUser,
             supplier: (row.supplier ?? "").trim() || null,
             location: (row.location ?? "").trim() || null,
             currentUserName,

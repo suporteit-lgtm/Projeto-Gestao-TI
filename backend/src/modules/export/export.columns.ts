@@ -6,8 +6,9 @@ type EquipmentWithCategory = any;
 
 function fmtDate(d: Date | null): string {
   if (!d) return "";
-  // dd/mm/aaaa (padrão BR)
-  return new Date(d).toLocaleDateString("pt-BR");
+  // dd/mm/aaaa (padrão BR). Em UTC porque são datas puras, gravadas à
+  // meia-noite UTC: no fuso do servidor sairiam um dia atrás.
+  return new Date(d).toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 export interface Column {
@@ -32,8 +33,14 @@ export const exportColumns: Column[] = [
   { header: "IMEI 1", get: (e) => e.imei1 ?? "" },
   { header: "IMEI 2", get: (e) => e.imei2 ?? "" },
   { header: "Endereço MAC", get: (e) => e.macAddress ?? "" },
+  { header: "Operadora", get: (e) => e.operadora ?? "" },
+  { header: "Plano", get: (e) => e.plano ?? "" },
+  { header: "Portabilidade", get: (e) => e.portabilidade ?? "" },
+  { header: "ICCID", get: (e) => e.iccid ?? "" },
+  { header: "Número de Telefone", get: (e) => e.telefone ?? "" },
   { header: "Fornecedor", get: (e) => e.supplier ?? "" },
   { header: "Localização", get: (e) => e.location ?? "" },
+  { header: "Usuário Antigo", get: (e) => e.previousUserName ?? "" },
   { header: "Usuário Atual", get: (e) => e.currentUserName ?? "" },
   { header: "Departamento", get: (e) => e.department ?? "" },
   { header: "Gestor", get: (e) => e.manager ?? "" },

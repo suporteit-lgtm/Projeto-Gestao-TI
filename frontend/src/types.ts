@@ -45,6 +45,13 @@ export interface Equipment {
   imei1: string | null;
   imei2: string | null;
   macAddress: string | null;
+  // Linha corporativa (chip/plano)
+  operadora: string | null;
+  plano: string | null;
+  portabilidade: string | null;
+  iccid: string | null;
+  telefone: string | null;
+  previousUserName: string | null;
   supplier: string | null;
   location: string | null;
   currentUserName: string | null;

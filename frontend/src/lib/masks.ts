@@ -29,6 +29,11 @@ export function maskMAC(value: string): string {
   return hex.match(/.{1,2}/g)?.join(":") ?? hex;
 }
 
+// ICCID do chip: apenas dígitos, até 20 (padrão de 19 a 20).
+export function maskICCID(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 20);
+}
+
 // Apenas dígitos (ex.: número de patrimônio numérico)
 export function maskDigits(value: string): string {
   return value.replace(/\D/g, "");

@@ -6,6 +6,7 @@ import {
   IMPORT_FIELDS,
   validateImport,
   commitImport,
+  buildTemplateCsv,
 } from "./import.service";
 
 const router = Router();
@@ -19,6 +20,14 @@ const rowsSchema = z.object({
 // GET /api/import/fields — campos disponíveis para o mapeamento na tela.
 router.get("/fields", (_req, res) => {
   res.json(IMPORT_FIELDS);
+});
+
+// GET /api/import/modelo — baixa a planilha modelo (CSV) com todas as colunas
+// aceitas e duas linhas de exemplo.
+router.get("/modelo", (_req, res) => {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="modelo-importacao.csv"');
+  res.send(buildTemplateCsv());
 });
 
 // POST /api/import/validate — valida sem gravar (preview), já apontando as
