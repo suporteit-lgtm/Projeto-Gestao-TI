@@ -246,7 +246,7 @@ export default function Inventory() {
           <i className="ti ti-search text-slate-400 dark:text-slate-500 text-lg shrink-0"></i>
           <input
             className="flex-1 bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
-            placeholder="Buscar por ID, marca, modelo, série, patrimônio, responsável..."
+            placeholder="Buscar em qualquer informação: ID, categoria, marca, modelo, série, patrimônio, responsável, local, IMEI, valor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />

@@ -9,6 +9,7 @@ import {
   UpdateEquipmentInput,
   AssignInput,
 } from "./equipment.schema";
+import { filterBySearch } from "./equipment.search";
 
 // Normaliza nomes para comparação (ignora espaços extras e maiúsc./minúsc.).
 function sameName(a?: string | null, b?: string | null) {
@@ -78,31 +79,17 @@ function buildWhere(f: EquipmentFilters): Prisma.EquipmentWhereInput {
   if (f.location) and.push({ location: { contains: f.location } });
   if (f.responsible) and.push({ currentUserName: { contains: f.responsible } });
 
-  if (f.search) {
-    const s = f.search;
-    and.push({
-      OR: [
-        { assetId: { contains: s } },
-        { brand: { contains: s } },
-        { model: { contains: s } },
-        { serialNumber: { contains: s } },
-        { assetTag: { contains: s } },
-        { currentUserName: { contains: s } },
-        { userEmail: { contains: s } },
-      ],
-    });
-  }
-
   if (and.length) where.AND = and;
   return where;
 }
 
 export async function listEquipment(filters: EquipmentFilters) {
-  return prisma.equipment.findMany({
+  const items = await prisma.equipment.findMany({
     where: buildWhere(filters),
     include: { category: true },
     orderBy: { updatedAt: "desc" },
   });
+  return filterBySearch(items, filters.search);
 }
 
 export async function getEquipment(id: string, unitId: string) {
