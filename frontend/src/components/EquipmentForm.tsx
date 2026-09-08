@@ -3,7 +3,7 @@
 // - Quando a categoria é de celular, mostra campos específicos (IMEI, MAC,
 //   película, capa, CPF) em vez de série/configuração/e-mail.
 // - Campos numéricos usam máscaras (valor, CPF, IMEI, MAC).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Category, Equipment, MetaOption } from "../types";
 import { toDateInput, isPhoneCategory } from "../lib/format";
@@ -70,6 +70,13 @@ export default function EquipmentForm({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
+  const errorRef = useRef<HTMLDivElement | null>(null);
+
+  // O botão Salvar fica no fim de um formulário longo: quando o cadastro é
+  // barrado (ex.: equipamento duplicado), traz o aviso para a tela.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
 
   useEffect(() => {
     if (equipment) {
@@ -188,7 +195,11 @@ export default function EquipmentForm({
       />
     )}
     <form onSubmit={handleSubmit} className="space-y-4">
-      {error && <Alert>{error}</Alert>}
+      {error && (
+        <div ref={errorRef}>
+          <Alert>{error}</Alert>
+        </div>
+      )}
 
       {/* ID do Ativo: automático */}
       <div className="grid grid-cols-2 gap-4">

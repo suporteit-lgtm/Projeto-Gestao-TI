@@ -10,6 +10,12 @@ import {
   AssignInput,
 } from "./equipment.schema";
 import { filterBySearch } from "./equipment.search";
+import {
+  assertNotDuplicate,
+  hasIdentifier,
+  DUPLICATE_SELECT,
+  IdentifierFields,
+} from "./equipment.duplicates";
 
 // Normaliza nomes para comparação (ignora espaços extras e maiúsc./minúsc.).
 function sameName(a?: string | null, b?: string | null) {
@@ -105,8 +111,29 @@ export async function getEquipment(id: string, unitId: string) {
   return eq;
 }
 
+// Barra o cadastro/edicao quando o equipamento ja existe no inventario da
+// unidade (mesmo numero de serie, patrimonio, IMEI ou MAC). Em "ignoreId"
+// passamos o proprio ativo na edicao, para ele nao conflitar consigo mesmo.
+async function ensureNotDuplicate(
+  tx: Prisma.TransactionClient,
+  input: IdentifierFields,
+  unitId: string,
+  ignoreId?: string
+) {
+  // Sem nenhum identificador preenchido nao ha o que comparar.
+  if (!hasIdentifier(input)) return;
+
+  const existentes = await tx.equipment.findMany({
+    where: { unitId, ...(ignoreId ? { id: { not: ignoreId } } : {}) },
+    select: DUPLICATE_SELECT,
+  });
+  assertNotDuplicate(input, existentes);
+}
+
 export async function createEquipment(input: CreateEquipmentInput, unitId: string) {
   return prisma.$transaction(async (tx) => {
+    await ensureNotDuplicate(tx, input, unitId);
+
     // ID do Ativo gerado automaticamente quando não é informado.
     const assetId =
       input.assetId && input.assetId.trim()
@@ -143,6 +170,8 @@ export async function updateEquipment(id: string, input: UpdateEquipmentInput, u
   return prisma.$transaction(async (tx) => {
     const current = await tx.equipment.findUnique({ where: { id } });
     if (!current || current.unitId !== unitId) throw new AppError("Equipamento não encontrado.", 404);
+
+    await ensureNotDuplicate(tx, input, unitId, id);
 
     const statusChanged =
       input.status !== undefined && input.status !== current.status;
