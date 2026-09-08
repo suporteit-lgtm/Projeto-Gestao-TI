@@ -32,6 +32,69 @@ const formatarCpf = (raw: string) => {
   return `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}`;
 };
 
+// Host da API, conforme o ambiente configurado.
+function clicksignHost(): string {
+  return (process.env.CLICKSIGN_ENV || "production") === "sandbox"
+    ? "https://sandbox.clicksign.com"
+    : "https://app.clicksign.com";
+}
+
+export type TermStatus = "PENDENTE" | "ASSINADO" | "RECUSADO";
+
+export interface DocumentStatus {
+  status: TermStatus;
+  signedAt: Date | null;
+  refusedAt: Date | null;
+  url: string | null; // link do documento no Clicksign
+}
+
+// Consulta o status de um documento. É assim que a tela de termos sabe quem
+// assinou: perguntamos ao Clicksign em vez de depender de webhook, que exigiria
+// endpoint público e configuração no painel deles.
+export async function getClicksignDocument(documentKey: string): Promise<DocumentStatus | null> {
+  const token = process.env.CLICKSIGN_TOKEN;
+  if (!token) throw new AppError("CLICKSIGN_TOKEN não configurado no servidor", 500);
+
+  const res = await fetch(
+    `${clicksignHost()}/api/v1/documents/${encodeURIComponent(documentKey)}?access_token=${token}`,
+    { headers: { Accept: "application/json" } }
+  );
+
+  // Documento apagado no Clicksign: deixa como está, sem derrubar a tela.
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const detalhe = (await res.text()).slice(0, 300);
+    console.error(`[clicksign-status] ${documentKey} FALHOU (${res.status}):`, detalhe);
+    throw new AppError(`Clicksign status (HTTP ${res.status})`, 502);
+  }
+
+  const doc = (await res.json())?.document ?? {};
+  const signers: any[] = Array.isArray(doc.signers) ? doc.signers : [];
+
+  // "closed" com todos assinados = fechado; se alguém recusou, o Clicksign
+  // marca refusal_at (no documento ou no signatário).
+  const recusa =
+    doc.refusal_at ?? signers.map((s) => s?.refusal_at).find(Boolean) ?? null;
+
+  const assinaturas = signers.map((s) => s?.signed_at).filter(Boolean);
+  const todosAssinaram = signers.length > 0 && assinaturas.length === signers.length;
+  const fechado = doc.status === "closed";
+
+  let status: TermStatus = "PENDENTE";
+  if (recusa) status = "RECUSADO";
+  else if (todosAssinaram || (fechado && assinaturas.length > 0)) status = "ASSINADO";
+
+  // A data da assinatura é a da última pessoa a assinar.
+  const ultima = assinaturas.sort().slice(-1)[0] ?? doc.finished_at ?? null;
+
+  return {
+    status,
+    signedAt: status === "ASSINADO" && ultima ? new Date(ultima) : null,
+    refusedAt: status === "RECUSADO" && recusa ? new Date(recusa) : null,
+    url: doc.downloads?.signed_file_url ?? doc.downloads?.original_file_url ?? null,
+  };
+}
+
 export async function sendToClicksign(opts: {
   filename: string;
   pdfBase64: string;
@@ -45,10 +108,7 @@ export async function sendToClicksign(opts: {
   const token = process.env.CLICKSIGN_TOKEN;
   if (!token) throw new AppError("CLICKSIGN_TOKEN não configurado no servidor", 500);
 
-  const host =
-    (process.env.CLICKSIGN_ENV || "production") === "sandbox"
-      ? "https://sandbox.clicksign.com"
-      : "https://app.clicksign.com";
+  const host = clicksignHost();
 
   if (!filename || !pdfBase64 || !Array.isArray(signers) || !signers.length) {
     throw new AppError("Parâmetros inválidos para o Clicksign", 400);

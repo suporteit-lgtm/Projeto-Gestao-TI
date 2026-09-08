@@ -10,6 +10,7 @@ import Inventory from "./pages/Inventory";
 import EquipmentDetail from "./pages/EquipmentDetail";
 import Alerts from "./pages/Alerts";
 import ImportPage from "./pages/Import";
+import Terms from "./pages/Terms";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/inventario" element={<Inventory />} />
         <Route path="/equipamento/:id" element={<EquipmentDetail />} />
         <Route path="/alertas" element={<Alerts />} />
+        <Route path="/termos" element={<Terms />} />
         <Route path="/importar" element={<ImportPage />} />
         <Route path="/configuracoes" element={<Settings />} />
         {/* Gestão de usuários apenas para admin */}

@@ -16,6 +16,7 @@ import documentsRoutes from "./modules/documents/documents.routes";
 import metaRoutes from "./modules/meta/meta.routes";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import unitsRoutes from "./modules/units/units.routes";
+import termsRoutes from "./modules/terms/terms.routes";
 
 export function createApp() {
   const app = express();
@@ -38,6 +39,7 @@ export function createApp() {
   app.use("/api/meta", metaRoutes);
   app.use("/api/dashboard", dashboardRoutes);
   app.use("/api/units", unitsRoutes);
+  app.use("/api/terms", termsRoutes);
 
   // Tratamento de erros sempre por último.
   app.use(errorHandler);

@@ -176,6 +176,44 @@ model Unit {
   categories Category[]
   equipment Equipment[]
   settings  Settings?
+  termSubmissions TermSubmission[]
+}
+
+// -----------------------------------------------------------------------------
+// Termos enviados para assinatura eletrônica (Clicksign). Um registro por
+// envio, para a tela de termos saber quem já assinou, quem ainda não respondeu
+// e quem recusou. O status definitivo é gravado aqui na primeira consulta ao
+// Clicksign, para não precisar perguntar de novo a cada abertura da tela.
+// -----------------------------------------------------------------------------
+model TermSubmission {
+  id     String  @id @default(uuid())
+  unitId String?
+  unit   Unit?   @relation(fields: [unitId], references: [id])
+
+  // A quem o termo se refere — texto, igual ao "Usuário Atual" do equipamento.
+  personName  String
+  personEmail String?
+  personCpf   String?
+
+  // Chave do documento no Clicksign, usada para consultar o status.
+  documentKey String @unique
+  filename    String
+
+  status    String    @default("PENDENTE") // PENDENTE | ASSINADO | RECUSADO
+  sentAt    DateTime  @default(now())
+  signedAt  DateTime?
+  refusedAt DateTime?
+
+  // Link do documento no Clicksign (vem da API) e o link do Drive, colado por
+  // quem arquiva o termo assinado.
+  clicksignUrl String?
+  driveUrl     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([unitId])
+  @@index([personName])
 }
 
 // -----------------------------------------------------------------------------

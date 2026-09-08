@@ -67,6 +67,7 @@ router.get("/person/termo.html", async (req, res, next) => {
 });
 
 import { sendToClicksign } from "./clicksign.service";
+import { recordSubmission } from "../terms/terms.service";
 
 const clicksignSchema = z.object({
   filename: z.string(),
@@ -86,6 +87,26 @@ router.post("/clicksign/send", async (req, res, next) => {
   try {
     const body = clicksignSchema.parse(req.body);
     const result = await sendToClicksign(body);
+
+    // Registra o envio para a tela de Termos. O signatário é a pessoa do termo.
+    // Falhar aqui não pode invalidar um envio que o Clicksign já aceitou: o
+    // documento foi mesmo enviado, então apenas registramos o erro no log.
+    const signatario = body.signers[0];
+    if (signatario) {
+      try {
+        await recordSubmission({
+          unitId: req.user!.unitId,
+          personName: signatario.name,
+          personEmail: signatario.email,
+          personCpf: signatario.documentation ?? null,
+          documentKey: result.documentKey,
+          filename: body.filename,
+        });
+      } catch (e) {
+        console.error("[clicksign-send] envio ok, mas falhou ao registrar o termo:", e);
+      }
+    }
+
     res.json(result);
   } catch (err) {
     next(err);
