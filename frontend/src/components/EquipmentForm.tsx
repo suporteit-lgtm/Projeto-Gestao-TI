@@ -136,6 +136,19 @@ export default function EquipmentForm({
     } else {
       setForm({ ...emptyForm(), categoryId: categories[0]?.id ?? "" });
     }
+    // Depende do EQUIPAMENTO, não da lista de categorias: antes, qualquer
+    // recarga de categorias (ao adicionar uma pelo "+", por exemplo) re-preenchia
+    // o formulário e descartava em silêncio o que o usuário já tinha mexido —
+    // Status do Ativo, Condição e Propriedade voltavam ao valor gravado.
+    // O modal desmonta ao fechar, então abrir de novo já re-preenche.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipment?.id]);
+
+  // Só no cadastro novo: quando as categorias chegam, seleciona a primeira.
+  // Mexe apenas nesse campo, para não apagar o que já foi preenchido.
+  useEffect(() => {
+    if (equipment) return;
+    setForm((f) => (f.categoryId ? f : { ...f, categoryId: categories[0]?.id ?? "" }));
   }, [equipment, categories]);
 
   function set(field: string, value: string) {

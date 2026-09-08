@@ -243,6 +243,7 @@ export async function assignEquipment(id: string, input: AssignInput, unitId: st
       data: {
         currentUserName: input.currentUserName,
         userEmail: input.userEmail ?? null,
+        userCpf: input.userCpf ?? null,
         department: input.department ?? null,
         manager: input.manager ?? null,
         deliveryDate: input.deliveryDate ?? new Date(),

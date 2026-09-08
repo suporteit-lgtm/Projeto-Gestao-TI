@@ -107,6 +107,7 @@ export const updateEquipmentSchema = z.object({
 export const assignSchema = z.object({
   currentUserName: z.string().min(1, "Informe o nome do responsável."),
   userEmail: optionalString,
+  userCpf: optionalString,
   department: optionalString,
   manager: optionalString,
   deliveryDate: optionalDate,

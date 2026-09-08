@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import { Equipment } from "../types";
 import { Modal, Alert } from "./ui";
+import { maskCPF } from "../lib/masks";
 
 export default function AssignModal({
   equipment,
@@ -15,6 +16,9 @@ export default function AssignModal({
 }) {
   const [currentUserName, setName] = useState("");
   const [userEmail, setEmail] = useState("");
+  // O CPF vai no termo de responsabilidade e e o que o Clicksign usa para
+  // validar quem assina, entao precisa ser preenchido na atribuicao.
+  const [userCpf, setCpf] = useState("");
   const [department, setDept] = useState(equipment.department ?? "");
   const [manager, setManager] = useState(equipment.manager ?? "");
   const [note, setNote] = useState("");
@@ -27,7 +31,7 @@ export default function AssignModal({
     try {
       const eq = await api<Equipment>(`/equipment/${equipment.id}/assign`, {
         method: "POST",
-        body: { currentUserName, userEmail, department, manager, note },
+        body: { currentUserName, userEmail, userCpf, department, manager, note },
       });
       onDone(eq);
     } catch (err: any) {
@@ -55,6 +59,16 @@ export default function AssignModal({
           <div>
             <label className="label">E-mail</label>
             <input className="input" value={userEmail} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">CPF do Usuário</label>
+            <input
+              className="input"
+              value={userCpf}
+              onChange={(e) => setCpf(maskCPF(e.target.value))}
+              placeholder="000.000.000-00"
+              inputMode="numeric"
+            />
           </div>
           <div>
             <label className="label">Departamento</label>
