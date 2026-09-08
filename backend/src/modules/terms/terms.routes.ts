@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authenticate } from "../../middlewares/auth";
-import { listTerms, setDriveUrl } from "./terms.service";
+import { listTerms, setDriveUrl, syncFromClicksign } from "./terms.service";
 
 const router = Router();
 router.use(authenticate);
@@ -11,6 +11,16 @@ router.use(authenticate);
 router.get("/", async (req, res, next) => {
   try {
     res.json(await listTerms(req.user!.unitId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/terms/sync — importa do Clicksign os termos que ainda não têm
+// registro (os enviados antes desta tela existir).
+router.post("/sync", async (req, res, next) => {
+  try {
+    res.json(await syncFromClicksign(req.user!.unitId));
   } catch (err) {
     next(err);
   }

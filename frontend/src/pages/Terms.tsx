@@ -23,6 +23,12 @@ interface TermoRow {
   statusIndisponivel: boolean;
 }
 
+interface ResultadoSync {
+  importados: number;
+  jaRegistrados: number;
+  semColaborador: string[];
+}
+
 const SITUACAO = {
   ASSINADO: { label: "Assinado", cor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300", icone: "ti-circle-check" },
   ENVIADO: { label: "Enviado", cor: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300", icone: "ti-clock" },
@@ -44,6 +50,11 @@ export default function Terms() {
   const [linkDigitado, setLinkDigitado] = useState("");
   const [salvando, setSalvando] = useState(false);
 
+  // Sincronização com o Clicksign: traz os termos enviados antes desta tela
+  // existir (ou enviados direto pelo painel do Clicksign).
+  const [sincronizando, setSincronizando] = useState(false);
+  const [resultadoSync, setResultadoSync] = useState<ResultadoSync | null>(null);
+
   async function carregar() {
     setLoading(true);
     setError("");
@@ -60,6 +71,21 @@ export default function Terms() {
   useEffect(() => {
     carregar();
   }, []);
+
+  async function sincronizar() {
+    setSincronizando(true);
+    setError("");
+    setResultadoSync(null);
+    try {
+      const r = await api<ResultadoSync>("/terms/sync", { method: "POST" });
+      setResultadoSync(r);
+      await carregar();
+    } catch (err: any) {
+      setError(err?.message ?? "Não foi possível sincronizar com o Clicksign.");
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   const contagem = useMemo(() => {
     const c: Record<Situacao, number> = { ASSINADO: 0, ENVIADO: 0, RECUSADO: 0, NAO_ENVIADO: 0 };
@@ -119,6 +145,16 @@ export default function Terms() {
             {loading ? "Carregando..." : `${rows.length} colaborador(es)`}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        <button
+          onClick={sincronizar}
+          disabled={sincronizando || loading}
+          title="Busca no Clicksign os termos que ainda não têm registro aqui"
+          className="flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+        >
+          <i className={`ti ${sincronizando ? "ti-loader-2 animate-spin" : "ti-cloud-download"} text-sm`}></i>
+          {sincronizando ? "Sincronizando..." : "Sincronizar com o Clicksign"}
+        </button>
         <button
           onClick={carregar}
           disabled={loading}
@@ -127,6 +163,7 @@ export default function Terms() {
           <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-sm`}></i>
           Atualizar
         </button>
+        </div>
       </div>
 
       {error && <Alert>{error}</Alert>}
@@ -135,6 +172,33 @@ export default function Terms() {
           Não foi possível consultar o Clicksign de algum termo. As linhas marcadas com
           <i className="ti ti-alert-triangle mx-1"></i>
           podem estar desatualizadas — tente atualizar novamente.
+        </Alert>
+      )}
+
+      {resultadoSync && (
+        <Alert kind={resultadoSync.importados > 0 ? "success" : "info"}>
+          {resultadoSync.importados > 0
+            ? `${resultadoSync.importados} termo(s) importado(s) do Clicksign.`
+            : "Nenhum termo novo encontrado no Clicksign."}
+          {resultadoSync.jaRegistrados > 0 && ` ${resultadoSync.jaRegistrados} já estava(m) registrado(s).`}
+          {resultadoSync.semColaborador.length > 0 && (
+            <>
+              {" "}
+              Ficaram de fora por não ter equipamento nesta unidade:{" "}
+              <strong>{resultadoSync.semColaborador.join(", ")}</strong>. Se forem de outra unidade,
+              troque de unidade e sincronize de novo.
+            </>
+          )}
+        </Alert>
+      )}
+
+      {/* Quem enviou termos antes desta tela existir vê tudo como "não
+          enviado"; o aviso aponta para a sincronização. */}
+      {!loading && !resultadoSync && contagem.NAO_ENVIADO > 0 && (
+        <Alert kind="info">
+          Enviou termos antes desta tela existir? Eles aparecem como{" "}
+          <strong>não enviado</strong> até serem importados — clique em{" "}
+          <strong>Sincronizar com o Clicksign</strong>.
         </Alert>
       )}
 

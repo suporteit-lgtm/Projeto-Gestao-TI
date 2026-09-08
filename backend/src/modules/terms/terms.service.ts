@@ -9,7 +9,12 @@
 // (assinado ou recusado) é gravado no banco e não perguntamos de novo.
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../middlewares/error";
-import { getClicksignDocument, TermStatus } from "../documents/clicksign.service";
+import {
+  getClicksignDocument,
+  listClicksignDocuments,
+  clicksignPrefix,
+  TermStatus,
+} from "../documents/clicksign.service";
 
 export type SituacaoTermo = "ASSINADO" | "ENVIADO" | "RECUSADO" | "NAO_ENVIADO";
 
@@ -64,6 +69,91 @@ export async function recordSubmission(input: {
       sentAt: new Date(),
     },
   });
+}
+
+export interface ResultadoSync {
+  importados: number;
+  jaRegistrados: number;
+  // Documentos do Clicksign cujo nome não casa com ninguém desta unidade.
+  // Devolvidos para a tela explicar por que ficaram de fora.
+  semColaborador: string[];
+}
+
+// Extrai o nome da pessoa do caminho do documento no Clicksign, que este
+// sistema grava como "/<prefixo>/<Nome da Pessoa>/termo-....pdf".
+function nomeNoCaminho(path: string, prefixo: string): string | null {
+  const partes = path.split("/").filter(Boolean);
+  if (partes[0] !== prefixo) return null; // documento de outro sistema
+  const nome = partes[1]?.trim();
+  return nome && nome.toLowerCase() !== "geral" ? nome : null;
+}
+
+// Importa para o banco os termos que já estavam no Clicksign — os enviados
+// ANTES desta tela existir, que por isso apareciam como "não enviado". Também
+// serve para termos enviados direto pelo painel do Clicksign.
+//
+// Roda quantas vezes quiser: o documentKey é único, então reimportar não
+// duplica nada. O status de cada um é resolvido na listagem seguinte, pela
+// consulta normal ao Clicksign.
+export async function syncFromClicksign(unitId: string): Promise<ResultadoSync> {
+  const prefixo = clicksignPrefix();
+  const documentos = await listClicksignDocuments();
+
+  // Só importa nomes que correspondem a alguém COM equipamento nesta unidade.
+  // Sem isso, uma conta Clicksign compartilhada jogaria pessoas de outra
+  // unidade aqui dentro — e o sistema isola os dados por unidade.
+  const equipamentos = await prisma.equipment.findMany({
+    where: { unitId },
+    select: { currentUserName: true },
+  });
+  const daUnidade = new Map<string, string>();
+  for (const eq of equipamentos) {
+    const nome = eq.currentUserName?.trim();
+    if (nome) daUnidade.set(chaveNome(nome), nome);
+  }
+
+  const jaTemos = new Set(
+    (await prisma.termSubmission.findMany({ select: { documentKey: true } })).map(
+      (t) => t.documentKey
+    )
+  );
+
+  const resultado: ResultadoSync = { importados: 0, jaRegistrados: 0, semColaborador: [] };
+  const foraDaUnidade = new Set<string>();
+
+  for (const doc of documentos) {
+    if (jaTemos.has(doc.key)) {
+      resultado.jaRegistrados++;
+      continue;
+    }
+
+    // O nome do signatário é mais confiável que o caminho; o caminho é a reserva.
+    const nome = doc.signerName?.trim() || nomeNoCaminho(doc.path, prefixo);
+    if (!nome) continue; // não é um termo deste sistema
+
+    const conhecido = daUnidade.get(chaveNome(nome));
+    if (!conhecido) {
+      foraDaUnidade.add(nome);
+      continue;
+    }
+
+    await prisma.termSubmission.create({
+      data: {
+        unitId,
+        personName: conhecido,
+        personEmail: doc.signerEmail?.trim() || null,
+        personCpf: null,
+        documentKey: doc.key,
+        filename: doc.path.split("/").pop() || "termo.pdf",
+        status: "PENDENTE", // a listagem consulta o Clicksign e resolve
+        sentAt: doc.createdAt ?? new Date(),
+      },
+    });
+    resultado.importados++;
+  }
+
+  resultado.semColaborador = [...foraDaUnidade].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  return resultado;
 }
 
 // Guarda (ou atualiza) o link do Drive do termo assinado.

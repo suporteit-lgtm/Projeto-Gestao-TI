@@ -41,6 +41,78 @@ function clicksignHost(): string {
 
 export type TermStatus = "PENDENTE" | "ASSINADO" | "RECUSADO";
 
+// Prefixo sob o qual este sistema grava os termos no Clicksign. Serve para
+// separar os nossos documentos de qualquer outro da mesma conta.
+export function clicksignPrefix(): string {
+  return (process.env.CLICKSIGN_PATH_PREFIX || "inventario-ti").replace(/[^\w-]/g, "");
+}
+
+export interface ClicksignDocumentoResumo {
+  key: string;
+  path: string;
+  createdAt: Date | null;
+  signerName: string | null;
+  signerEmail: string | null;
+}
+
+function resumoDoDocumento(doc: any): ClicksignDocumentoResumo | null {
+  const key = doc?.key;
+  if (!key) return null;
+  const primeiro = Array.isArray(doc.signers) ? doc.signers[0] : null;
+  const data = doc.created_at ?? doc.uploaded_at ?? null;
+  return {
+    key,
+    path: doc.path ?? "",
+    createdAt: data ? new Date(data) : null,
+    signerName: primeiro?.name ?? null,
+    signerEmail: primeiro?.email ?? null,
+  };
+}
+
+// Lista os documentos da conta. Usada para recuperar os termos enviados ANTES
+// desta tela existir, que por isso não têm registro no banco.
+//
+// A paginação da API v1 é inconsistente entre contas: se o parâmetro "page" for
+// ignorado, a segunda página repete a primeira. Por isso paramos quando não vem
+// nada novo, além de um teto de páginas.
+export async function listClicksignDocuments(): Promise<ClicksignDocumentoResumo[]> {
+  const token = process.env.CLICKSIGN_TOKEN;
+  if (!token) throw new AppError("CLICKSIGN_TOKEN não configurado no servidor", 500);
+
+  const host = clicksignHost();
+  const encontrados = new Map<string, ClicksignDocumentoResumo>();
+  const MAX_PAGINAS = 50;
+
+  for (let page = 1; page <= MAX_PAGINAS; page++) {
+    const res = await fetch(`${host}/api/v1/documents?access_token=${token}&page=${page}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      const detalhe = (await res.text()).slice(0, 300);
+      console.error(`[clicksign-list] página ${page} FALHOU (${res.status}):`, detalhe);
+      // Já trouxemos algo? Devolve o que deu, em vez de perder tudo.
+      if (encontrados.size) break;
+      throw new AppError(`Clicksign lista de documentos (HTTP ${res.status})`, 502);
+    }
+
+    const corpo = await res.json();
+    const lista: any[] = Array.isArray(corpo) ? corpo : corpo?.documents ?? [];
+    if (!lista.length) break;
+
+    let novos = 0;
+    for (const item of lista) {
+      const resumo = resumoDoDocumento(item?.document ?? item);
+      if (!resumo || encontrados.has(resumo.key)) continue;
+      encontrados.set(resumo.key, resumo);
+      novos++;
+    }
+    // Página repetida (ou sem nada novo): a API não está paginando.
+    if (!novos) break;
+  }
+
+  return [...encontrados.values()];
+}
+
 export interface DocumentStatus {
   status: TermStatus;
   signedAt: Date | null;
@@ -139,7 +211,7 @@ export async function sendToClicksign(opts: {
   const prazo = new Date();
   prazo.setDate(prazo.getDate() + (deadlineDays && deadlineDays > 0 ? deadlineDays : 30));
 
-  const prefixo = (process.env.CLICKSIGN_PATH_PREFIX || "inventario-ti").replace(/[^\w-]/g, "");
+  const prefixo = clicksignPrefix();
   const pastaSegura = (pasta || "Geral").replace(/[\/\\]/g, "-").trim() || "Geral";
 
   const doc = await cs("documents", {
