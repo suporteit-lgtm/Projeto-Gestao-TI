@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authenticate } from "../../middlewares/auth";
 import {
   IMPORT_FIELDS,
-  validateRows,
+  validateImport,
   commitImport,
 } from "./import.service";
 
@@ -21,11 +21,12 @@ router.get("/fields", (_req, res) => {
   res.json(IMPORT_FIELDS);
 });
 
-// POST /api/import/validate — valida sem gravar (preview).
-router.post("/validate", (req, res, next) => {
+// POST /api/import/validate — valida sem gravar (preview), já apontando as
+// linhas que duplicam um equipamento do inventário ou do próprio arquivo.
+router.post("/validate", async (req, res, next) => {
   try {
     const { rows } = rowsSchema.parse(req.body);
-    res.json(validateRows(rows));
+    res.json(await validateImport(rows, req.user!.unitId));
   } catch (err) {
     next(err);
   }

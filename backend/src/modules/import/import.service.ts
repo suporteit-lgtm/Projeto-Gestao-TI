@@ -10,6 +10,14 @@ import {
   ownershipFromLabel,
 } from "../equipment/equipment.constants";
 import { generateAssetId } from "../equipment/equipment.service";
+import {
+  findDuplicate,
+  duplicateMessage,
+  hasIdentifier,
+  DUPLICATE_SELECT,
+  ExistingEquipment,
+  IdentifierFields,
+} from "../equipment/equipment.duplicates";
 
 // Campos que o frontend pode mapear. "formerUser" alimenta SÓ o histórico.
 // "assetId" é opcional: se a coluna estiver vazia, o ID é gerado automaticamente.
@@ -79,6 +87,23 @@ function parseMoney(value?: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+// Identificadores fisicos de uma linha do CSV, no formato que a checagem de
+// duplicata espera (a mesma usada no cadastro pela tela).
+function rowIdentifiers(row: Row): IdentifierFields {
+  return {
+    serialNumber: (row.serialNumber ?? "").trim() || null,
+    assetTag: (row.assetTag ?? "").trim() || null,
+    imei1: (row.imei1 ?? "").trim() || null,
+    imei2: (row.imei2 ?? "").trim() || null,
+    macAddress: (row.macAddress ?? "").trim() || null,
+  };
+}
+
+// Carrega os identificadores dos ativos ja cadastrados na unidade.
+async function loadIdentifiers(unitId: string): Promise<ExistingEquipment[]> {
+  return prisma.equipment.findMany({ where: { unitId }, select: DUPLICATE_SELECT });
+}
+
 export interface RowValidation {
   index: number;
   ok: boolean;
@@ -113,16 +138,59 @@ export function validateRows(rows: Row[]): RowValidation[] {
   });
 }
 
+// Validacao COMPLETA do preview: formato + duplicatas. Aponta tanto o
+// equipamento que ja esta no inventario quanto a linha repetida dentro do
+// proprio arquivo, para o usuario corrigir antes de importar.
+export async function validateImport(rows: Row[], unitId: string): Promise<RowValidation[]> {
+  const validations = validateRows(rows);
+  const cadastrados = await loadIdentifiers(unitId);
+
+  // Linhas do arquivo ja aceitas; "id" guarda o indice para citar a linha.
+  const doArquivo: ExistingEquipment[] = [];
+
+  rows.forEach((row, i) => {
+    const ids = rowIdentifiers(row);
+    if (!hasIdentifier(ids)) return;
+
+    const noInventario = findDuplicate(ids, cadastrados);
+    if (noInventario) {
+      validations[i].errors.push(duplicateMessage(noInventario));
+      validations[i].ok = false;
+      return;
+    }
+
+    const noArquivo = findDuplicate(ids, doArquivo);
+    if (noArquivo) {
+      const linha = Number(noArquivo.existing.id) + 1;
+      validations[i].errors.push(
+        `Duplicado no próprio arquivo: o ${noArquivo.label} "${noArquivo.value}" já aparece na linha ${linha}.`
+      );
+      validations[i].ok = false;
+      return;
+    }
+
+    doArquivo.push({ id: String(i), assetId: validations[i].assetId, ...ids });
+  });
+
+  return validations;
+}
+
 export interface ImportResult {
   created: number;
   skipped: number;
   errors: { index: number; assetId: string; reason: string }[];
 }
 
-// Importa de fato (na unidade ativa). Linhas inválidas ou com assetId já
-// existente são puladas.
+// Importa de fato (na unidade ativa). Linhas inválidas, com assetId já
+// existente ou que dupliquem um equipamento do inventário são puladas — a
+// importação segue com as demais e reporta o motivo de cada uma.
 export async function commitImport(rows: Row[], unitId: string): Promise<ImportResult> {
   const result: ImportResult = { created: 0, skipped: 0, errors: [] };
+
+  // Identificadores já no inventário. A lista cresce a cada linha importada,
+  // então pega também duplicata entre linhas do próprio arquivo. Entre os
+  // blocos que o frontend envia, as linhas anteriores já estão no banco.
+  const identificadores = await loadIdentifiers(unitId);
 
   // Cache de categorias DA UNIDADE (cria as que faltam, ignorando caixa).
   const categoryCache = new Map<string, string>();
@@ -160,6 +228,17 @@ export async function commitImport(rows: Row[], unitId: string): Promise<ImportR
       }
     }
 
+    // Mesmo equipamento físico já cadastrado (série, patrimônio, IMEI ou MAC).
+    const ids = rowIdentifiers(row);
+    if (hasIdentifier(ids)) {
+      const conflito = findDuplicate(ids, identificadores);
+      if (conflito) {
+        result.skipped++;
+        result.errors.push({ index: i, assetId, reason: duplicateMessage(conflito) });
+        continue;
+      }
+    }
+
     const statusKey = row.status ? statusFromLabel(row.status) : null;
     const conditionKey = row.condition ? conditionFromLabel(row.condition) : null;
     const ownershipKey = row.ownership ? ownershipFromLabel(row.ownership) : null;
@@ -174,7 +253,7 @@ export async function commitImport(rows: Row[], unitId: string): Promise<ImportR
       // transação travava o banco e estourava o timeout de 5s.
       const catId = await categoryId(row.category!);
 
-      await prisma.$transaction(async (tx) => {
+      const criado = await prisma.$transaction(async (tx) => {
         // Gera o ID automaticamente quando a coluna vem vazia.
         const finalAssetId = assetId || (await generateAssetId(tx, catId));
         const eq = await tx.equipment.create({
@@ -241,7 +320,17 @@ export async function commitImport(rows: Row[], unitId: string): Promise<ImportR
             },
           });
         }
+        return eq;
       }, { timeout: 20000 });
+
+      // Passa a valer como "já cadastrado" para as próximas linhas.
+      identificadores.push({
+        id: criado.id,
+        assetId: criado.assetId,
+        brand: criado.brand,
+        model: criado.model,
+        ...ids,
+      });
       result.created++;
     } catch (e: any) {
       result.skipped++;
