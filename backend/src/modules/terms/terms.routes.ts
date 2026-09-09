@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authenticate } from "../../middlewares/auth";
-import { listTerms, setDriveUrl, syncFromClicksign } from "./terms.service";
+import { listTerms, setDriveUrl, linkExistingTerm } from "./terms.service";
 
 const router = Router();
 router.use(authenticate);
@@ -16,11 +16,18 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// POST /api/terms/sync — importa do Clicksign os termos que ainda não têm
-// registro (os enviados antes desta tela existir).
-router.post("/sync", async (req, res, next) => {
+const vinculoSchema = z.object({
+  personName: z.string().trim().min(1, "Informe o colaborador."),
+  documento: z.string().trim().min(1, "Cole o link ou a chave do documento."),
+});
+
+// POST /api/terms/link — vincula a um colaborador um termo que já existe no
+// Clicksign (enviado antes desta tela, ou direto pelo painel deles). Necessário
+// porque a API v1 não permite listar os documentos da conta.
+router.post("/link", async (req, res, next) => {
   try {
-    res.json(await syncFromClicksign(req.user!.unitId));
+    const { personName, documento } = vinculoSchema.parse(req.body);
+    res.json(await linkExistingTerm({ unitId: req.user!.unitId, personName, documento }));
   } catch (err) {
     next(err);
   }

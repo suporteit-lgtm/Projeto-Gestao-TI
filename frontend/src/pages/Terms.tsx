@@ -23,10 +23,10 @@ interface TermoRow {
   statusIndisponivel: boolean;
 }
 
-interface ResultadoSync {
-  importados: number;
-  jaRegistrados: number;
-  semColaborador: string[];
+interface ResultadoVinculo {
+  situacao: Situacao;
+  signerName: string | null;
+  signerEmail: string | null;
 }
 
 const SITUACAO = {
@@ -37,6 +37,16 @@ const SITUACAO = {
 } as const;
 
 const ORDEM: Situacao[] = ["NAO_ENVIADO", "ENVIADO", "RECUSADO", "ASSINADO"];
+
+// Sem acento, minúsculo e sem espaços repetidos.
+function norm(t: string): string {
+  return t
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export default function Terms() {
   const [rows, setRows] = useState<TermoRow[]>([]);
@@ -50,10 +60,12 @@ export default function Terms() {
   const [linkDigitado, setLinkDigitado] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  // Sincronização com o Clicksign: traz os termos enviados antes desta tela
-  // existir (ou enviados direto pelo painel do Clicksign).
-  const [sincronizando, setSincronizando] = useState(false);
-  const [resultadoSync, setResultadoSync] = useState<ResultadoSync | null>(null);
+  // Vínculo de um termo que já existe no Clicksign: a API v1 deles não permite
+  // listar os documentos da conta, então a chave é apontada uma vez por pessoa.
+  const [vinculando, setVinculando] = useState<string | null>(null);
+  const [docDigitado, setDocDigitado] = useState("");
+  const [salvandoVinculo, setSalvandoVinculo] = useState(false);
+  const [avisoVinculo, setAvisoVinculo] = useState("");
 
   async function carregar() {
     setLoading(true);
@@ -72,18 +84,31 @@ export default function Terms() {
     carregar();
   }, []);
 
-  async function sincronizar() {
-    setSincronizando(true);
+  async function vincular(row: TermoRow) {
+    setSalvandoVinculo(true);
     setError("");
-    setResultadoSync(null);
+    setAvisoVinculo("");
     try {
-      const r = await api<ResultadoSync>("/terms/sync", { method: "POST" });
-      setResultadoSync(r);
+      const r = await api<ResultadoVinculo>("/terms/link", {
+        method: "POST",
+        body: { personName: row.personName, documento: docDigitado },
+      });
+      // O documento pode ser da pessoa errada: avisa em vez de aceitar calado.
+      const mesmaPessoa =
+        !r.signerName ||
+        norm(r.signerName) === norm(row.personName);
+      if (!mesmaPessoa) {
+        setAvisoVinculo(
+          `Vinculado, mas atenção: no Clicksign quem assina esse documento é "${r.signerName}", e não "${row.personName}". Confira se é o termo certo.`
+        );
+      }
+      setVinculando(null);
+      setDocDigitado("");
       await carregar();
     } catch (err: any) {
-      setError(err?.message ?? "Não foi possível sincronizar com o Clicksign.");
+      setError(err?.message ?? "Não foi possível vincular o termo.");
     } finally {
-      setSincronizando(false);
+      setSalvandoVinculo(false);
     }
   }
 
@@ -145,16 +170,6 @@ export default function Terms() {
             {loading ? "Carregando..." : `${rows.length} colaborador(es)`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-        <button
-          onClick={sincronizar}
-          disabled={sincronizando || loading}
-          title="Busca no Clicksign os termos que ainda não têm registro aqui"
-          className="flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
-        >
-          <i className={`ti ${sincronizando ? "ti-loader-2 animate-spin" : "ti-cloud-download"} text-sm`}></i>
-          {sincronizando ? "Sincronizando..." : "Sincronizar com o Clicksign"}
-        </button>
         <button
           onClick={carregar}
           disabled={loading}
@@ -163,7 +178,6 @@ export default function Terms() {
           <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-sm`}></i>
           Atualizar
         </button>
-        </div>
       </div>
 
       {error && <Alert>{error}</Alert>}
@@ -175,30 +189,17 @@ export default function Terms() {
         </Alert>
       )}
 
-      {resultadoSync && (
-        <Alert kind={resultadoSync.importados > 0 ? "success" : "info"}>
-          {resultadoSync.importados > 0
-            ? `${resultadoSync.importados} termo(s) importado(s) do Clicksign.`
-            : "Nenhum termo novo encontrado no Clicksign."}
-          {resultadoSync.jaRegistrados > 0 && ` ${resultadoSync.jaRegistrados} já estava(m) registrado(s).`}
-          {resultadoSync.semColaborador.length > 0 && (
-            <>
-              {" "}
-              Ficaram de fora por não ter equipamento nesta unidade:{" "}
-              <strong>{resultadoSync.semColaborador.join(", ")}</strong>. Se forem de outra unidade,
-              troque de unidade e sincronize de novo.
-            </>
-          )}
-        </Alert>
-      )}
+      {avisoVinculo && <Alert kind="info">{avisoVinculo}</Alert>}
 
-      {/* Quem enviou termos antes desta tela existir vê tudo como "não
-          enviado"; o aviso aponta para a sincronização. */}
-      {!loading && !resultadoSync && contagem.NAO_ENVIADO > 0 && (
+      {/* Termos enviados antes desta tela existir aparecem como "não enviado":
+          o Clicksign não permite listar os documentos da conta, então a chave
+          de cada um precisa ser apontada uma vez. */}
+      {!loading && contagem.NAO_ENVIADO > 0 && (
         <Alert kind="info">
-          Enviou termos antes desta tela existir? Eles aparecem como{" "}
-          <strong>não enviado</strong> até serem importados — clique em{" "}
-          <strong>Sincronizar com o Clicksign</strong>.
+          Já enviou o termo de alguém por fora desta tela? Use{" "}
+          <strong>vincular termo do Clicksign</strong> na linha da pessoa e cole o link do
+          documento — dali em diante o status é acompanhado sozinho. Termos enviados pelo sistema
+          já entram automaticamente.
         </Alert>
       )}
 
@@ -320,8 +321,61 @@ export default function Terms() {
 
                       {/* Link do termo assinado */}
                       <td className="px-4 py-3">
-                        {r.situacao !== "ASSINADO" ? (
-                          <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+                        {r.situacao === "NAO_ENVIADO" ? (
+                          // Sem termo registrado: permite apontar um que já
+                          // exista no Clicksign (a API não deixa listar).
+                          vinculando === r.personName ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                autoFocus
+                                className="input text-xs py-1"
+                                placeholder="Link ou chave do documento no Clicksign"
+                                value={docDigitado}
+                                onChange={(e) => setDocDigitado(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && docDigitado.trim()) vincular(r);
+                                  if (e.key === "Escape") setVinculando(null);
+                                }}
+                              />
+                              <button
+                                onClick={() => vincular(r)}
+                                disabled={salvandoVinculo || !docDigitado.trim()}
+                                className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                              >
+                                {salvandoVinculo ? "..." : "Vincular"}
+                              </button>
+                              <button
+                                onClick={() => setVinculando(null)}
+                                className="text-xs text-slate-400 hover:text-slate-600"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setVinculando(r.personName);
+                                setDocDigitado("");
+                              }}
+                              title="Se o termo já foi enviado por fora do sistema, cole aqui o link do documento no Clicksign"
+                              className="text-xs text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+                            >
+                              <i className="ti ti-link"></i> vincular termo do Clicksign
+                            </button>
+                          )
+                        ) : r.situacao !== "ASSINADO" ? (
+                          r.clicksignUrl ? (
+                            <a
+                              href={r.clicksignUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:underline"
+                            >
+                              <i className="ti ti-external-link"></i> Clicksign
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+                          )
                         ) : emEdicao ? (
                           <div className="flex items-center gap-2">
                             <input
@@ -397,7 +451,9 @@ export default function Terms() {
 
       <p className="text-xs text-slate-400 dark:text-slate-500">
         A situação vem do Clicksign, consultada a cada abertura desta tela. O termo é enviado pelo
-        botão de termo no inventário (visão Colaboradores).
+        botão de termo no inventário (visão Colaboradores) — esses já entram aqui automaticamente.
+        Termos enviados por fora precisam ser vinculados uma vez, porque a API do Clicksign não
+        permite listar os documentos da conta.
       </p>
     </div>
   );
