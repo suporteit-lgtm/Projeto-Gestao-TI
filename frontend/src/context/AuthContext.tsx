@@ -1,12 +1,19 @@
 // Contexto de autenticação: guarda o usuário logado e expõe login/logout.
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { api, getToken, setToken } from "../api/client";
+import {
+  api,
+  getToken,
+  setToken,
+  getRemember,
+  setRemember,
+  setLastEmail,
+} from "../api/client";
 import { AuthUser } from "../types";
 
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string, unitId?: string) => Promise<void>;
+  login: (email: string, password: string, unitId?: string, remember?: boolean) => Promise<void>;
   logout: () => void;
   switchUnit: (unitId: string) => Promise<void>;
   updateUser: (data: Partial<AuthUser>) => void;
@@ -47,12 +54,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     load();
   }, []);
 
-  async function login(email: string, password: string, unitId?: string) {
+  async function login(
+    email: string,
+    password: string,
+    unitId?: string,
+    remember = true
+  ) {
     const data = await api<{ token: string; user: AuthUser }>("/auth/login", {
       method: "POST",
-      body: { email, password, unitId },
+      body: { email, password, unitId, remember },
     });
-    setToken(data.token);
+    // "Lembrar de mim" decide se o token sobrevive a fechar o navegador e se o
+    // e-mail volta preenchido na próxima vez. A senha nunca é guardada.
+    setRemember(remember);
+    setLastEmail(remember ? email : null);
+    setToken(data.token, remember);
     setUser(data.user);
   }
 
@@ -66,11 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function switchUnit(unitId: string) {
+    // Mantém a preferência de sessão: trocar de unidade não deve encurtar o
+    // prazo de quem pediu para ser lembrado.
+    const remember = getRemember();
     const data = await api<{ token: string; user: AuthUser }>("/auth/switch-unit", {
       method: "POST",
-      body: { unitId },
+      body: { unitId, remember },
     });
-    setToken(data.token);
+    setToken(data.token, remember);
     setUser(data.user);
   }
 

@@ -9,12 +9,41 @@ if (envApiUrl) {
   BASE_URL = envApiUrl.endsWith("/api") ? envApiUrl : `${envApiUrl.replace(/\/$/, "")}/api`;
 }
 
+// Preferências do login guardadas no navegador. "Lembrar de mim" decide onde o
+// token fica: no localStorage (sobrevive a fechar o navegador) ou no
+// sessionStorage (cai ao fechar a aba). A senha NUNCA é guardada.
+const REMEMBER_KEY = "inventario_remember";
+const LAST_EMAIL_KEY = "inventario_last_email";
+
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
 }
-export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+
+export function setToken(token: string | null, remember = true) {
+  // Limpa dos dois lados antes de gravar, para não sobrar token antigo.
+  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  if (!token) return;
+  (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
+}
+
+// Se o usuário quer ser lembrado (padrão: sim, é o caso mais comum aqui).
+export function getRemember(): boolean {
+  return localStorage.getItem(REMEMBER_KEY) !== "0";
+}
+
+export function setRemember(remember: boolean) {
+  localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
+}
+
+// Último e-mail usado, para preencher o campo. Só quando "lembrar" está ligado.
+export function getLastEmail(): string {
+  return localStorage.getItem(LAST_EMAIL_KEY) ?? "";
+}
+
+export function setLastEmail(email: string | null) {
+  if (email) localStorage.setItem(LAST_EMAIL_KEY, email);
+  else localStorage.removeItem(LAST_EMAIL_KEY);
 }
 
 export class ApiError extends Error {

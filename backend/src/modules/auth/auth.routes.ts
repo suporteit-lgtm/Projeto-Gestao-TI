@@ -11,6 +11,8 @@ const loginSchema = z.object({
   email: z.string().email("E-mail inválido."),
   password: z.string().min(1, "Informe a senha."),
   unitId: z.string().optional(),
+  // "Lembrar de mim": pede um token de validade longa.
+  remember: z.boolean().optional(),
 });
 
 // GET /api/auth/units — lista pública das unidades (para o seletor do login).
@@ -107,8 +109,8 @@ router.get("/units-stats", async (_req, res, next) => {
 // POST /api/auth/login
 router.post("/login", async (req, res, next) => {
   try {
-    const { email, password, unitId } = loginSchema.parse(req.body);
-    const result = await login(email, password, unitId);
+    const { email, password, unitId, remember } = loginSchema.parse(req.body);
+    const result = await login(email, password, unitId, remember);
     res.json(result);
   } catch (err) {
     next(err);
@@ -118,8 +120,10 @@ router.post("/login", async (req, res, next) => {
 // POST /api/auth/switch-unit — troca a unidade ativa na sessão atual.
 router.post("/switch-unit", authenticate, async (req, res, next) => {
   try {
-    const { unitId } = z.object({ unitId: z.string().min(1) }).parse(req.body);
-    const result = await switchUnit(req.user!.sub, unitId);
+    const { unitId, remember } = z
+      .object({ unitId: z.string().min(1), remember: z.boolean().optional() })
+      .parse(req.body);
+    const result = await switchUnit(req.user!.sub, unitId, remember);
     res.json(result);
   } catch (err) {
     next(err);

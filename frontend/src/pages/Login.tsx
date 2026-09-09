@@ -1,7 +1,7 @@
 // Tela de login: e-mail + senha.
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../api/client";
+import { api, getRemember, getLastEmail } from "../api/client";
 import { Alert } from "../components/ui";
 
 interface UnitStats {
@@ -14,11 +14,14 @@ interface UnitStats {
 
 export default function Login() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(getRemember() ? getLastEmail() : "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [unitsStats, setUnitsStats] = useState<UnitStats[]>([]);
+  // "Lembrar de mim": mantém a sessão por 30 dias e traz o e-mail preenchido na
+  // próxima vez. Vem marcado por padrão, e respeita a última escolha.
+  const [remember, setRemember] = useState(getRemember());
 
   // Carrega as estatísticas das unidades.
   useEffect(() => {
@@ -32,7 +35,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, undefined, remember);
     } catch (err: any) {
       setError(err.message ?? "Falha ao entrar.");
     } finally {
@@ -86,6 +89,18 @@ export default function Login() {
                 placeholder="••••••••"
               />
             </div>
+
+            <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-marca focus:ring-2 focus:ring-marca/30 cursor-pointer"
+              />
+              <span className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-slate-100 transition-colors">
+                Lembrar de mim
+              </span>
+            </label>
 
             <button
               type="submit"

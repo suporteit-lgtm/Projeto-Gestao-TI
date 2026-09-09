@@ -7,6 +7,8 @@ export const env = {
   port: Number(process.env.PORT || 4000),
   jwtSecret: process.env.JWT_SECRET || "dev-secret-troque-em-producao",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "8h",
+  // Validade usada quando o usuário marca "Lembrar de mim" no login.
+  jwtExpiresInRemember: process.env.JWT_EXPIRES_IN_REMEMBER || "30d",
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:5173",
 };
 

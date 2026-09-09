@@ -15,7 +15,18 @@ export interface TokenPayload {
 
 // Login com escolha de unidade. Usuário COMUM só entra na unidade dele;
 // ADMIN pode entrar em qualquer unidade (para gerir todas).
-export async function login(email: string, password: string, unitId?: string) {
+// Validade do token: curta por padrão, longa quando o usuário marcou "Lembrar
+// de mim". É o que evita ter de digitar o login toda hora.
+function validadeDoToken(remember?: boolean): string {
+  return remember ? env.jwtExpiresInRemember : env.jwtExpiresIn;
+}
+
+export async function login(
+  email: string,
+  password: string,
+  unitId?: string,
+  remember?: boolean
+) {
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (!user || !user.active) {
     throw new AppError("E-mail ou senha inválidos.", 401);
@@ -59,7 +70,9 @@ export async function login(email: string, password: string, unitId?: string) {
     unitId: unidade.id,
     unitName: unidade.name,
   };
-  const token = jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as any);
+  const token = jwt.sign(payload, env.jwtSecret, {
+    expiresIn: validadeDoToken(remember),
+  } as any);
 
   return {
     token,
@@ -73,7 +86,7 @@ export function hashPassword(plain: string) {
 }
 
 // Permite trocar a unidade ativa de um usuário e emitir um novo token.
-export async function switchUnit(userId: string, unitId: string) {
+export async function switchUnit(userId: string, unitId: string, remember?: boolean) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.active) {
     throw new AppError("Usuário inválido ou inativo.", 401);
@@ -102,7 +115,9 @@ export async function switchUnit(userId: string, unitId: string) {
     unitId: unidade.id,
     unitName: unidade.name,
   };
-  const token = jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as any);
+  const token = jwt.sign(payload, env.jwtSecret, {
+    expiresIn: validadeDoToken(remember),
+  } as any);
 
   return {
     token,
