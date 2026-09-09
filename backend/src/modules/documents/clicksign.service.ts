@@ -41,6 +41,28 @@ function clicksignHost(): string {
 
 export type TermStatus = "PENDENTE" | "ASSINADO" | "RECUSADO";
 
+// Traduz a falha do Clicksign para algo que diga o que fazer. O caso mais comum
+// e mais confuso é o token invalido: a API responde 403 com "Access Token
+// inválido", e um "HTTP 403" seco fazia parecer problema de permissão do
+// documento, quando é a credencial que está errada.
+function erroDoClicksign(status: number, corpo: string, contexto: string): AppError {
+  const tokenInvalido =
+    status === 401 || (status === 403 && /access token/i.test(corpo));
+
+  if (tokenInvalido) {
+    return new AppError(
+      "O Clicksign recusou o token de acesso (Access Token inválido). " +
+        "Gere um novo token no painel do Clicksign (Configurações → API) e " +
+        "atualize a variável CLICKSIGN_TOKEN no servidor.",
+      502
+    );
+  }
+  if (status === 404) {
+    return new AppError(`Clicksign: ${contexto} não encontrado.`, 404);
+  }
+  return new AppError(`Clicksign ${contexto} (HTTP ${status})`, 502);
+}
+
 // Prefixo sob o qual este sistema grava os termos no Clicksign. Serve para
 // separar os nossos documentos de qualquer outro da mesma conta.
 export function clicksignPrefix(): string {
@@ -75,7 +97,7 @@ export async function getClicksignDocument(documentKey: string): Promise<Documen
   if (!res.ok) {
     const detalhe = (await res.text()).slice(0, 300);
     console.error(`[clicksign-status] ${documentKey} FALHOU (${res.status}):`, detalhe);
-    throw new AppError(`Clicksign status (HTTP ${res.status})`, 502);
+    throw erroDoClicksign(res.status, detalhe, "consulta do documento");
   }
 
   const doc = (await res.json())?.document ?? {};
@@ -144,7 +166,7 @@ export async function sendToClicksign(opts: {
     if (!res.ok) {
       const detalhe = data?.errors ? JSON.stringify(data.errors) : txt.slice(0, 300);
       console.error(`[clicksign-send] ${path} FALHOU (${res.status}):`, detalhe);
-      throw new AppError(`Clicksign ${path} (HTTP ${res.status}): ${detalhe}`, 502);
+      throw erroDoClicksign(res.status, detalhe, `envio (${path})`);
     }
     return data;
   };
