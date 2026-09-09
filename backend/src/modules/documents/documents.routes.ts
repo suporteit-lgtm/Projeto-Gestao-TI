@@ -89,10 +89,19 @@ router.post("/clicksign/send", async (req, res, next) => {
     const result = await sendToClicksign(body);
 
     // Registra o envio para a tela de Termos. O signatário é a pessoa do termo.
-    // Falhar aqui não pode invalidar um envio que o Clicksign já aceitou: o
-    // documento foi mesmo enviado, então apenas registramos o erro no log.
+    // Falhar aqui não pode invalidar um envio que o Clicksign já aceitou — o
+    // documento foi mesmo enviado. Mas também não pode falhar em silêncio: o
+    // termo sairia sem aparecer na tela de Termos e ninguém saberia por quê.
+    // Por isso o aviso volta na resposta, para a tela mostrar.
     const signatario = body.signers[0];
-    if (signatario) {
+    let registrado = false;
+    let avisoRegistro: string | undefined;
+
+    if (!signatario) {
+      avisoRegistro =
+        "O termo foi enviado, mas sem signatário identificado não foi possível " +
+        "registrá-lo na tela de Termos.";
+    } else {
       try {
         await recordSubmission({
           unitId: req.user!.unitId,
@@ -102,12 +111,17 @@ router.post("/clicksign/send", async (req, res, next) => {
           documentKey: result.documentKey,
           filename: body.filename,
         });
-      } catch (e) {
+        registrado = true;
+      } catch (e: any) {
         console.error("[clicksign-send] envio ok, mas falhou ao registrar o termo:", e);
+        avisoRegistro =
+          `O termo foi enviado, mas não foi registrado na tela de Termos: ` +
+          `${e?.message ?? "erro desconhecido"}. Você pode vinculá-lo por lá, ` +
+          `em "vincular termo do Clicksign".`;
       }
     }
 
-    res.json(result);
+    res.json({ ...result, registrado, avisoRegistro });
   } catch (err) {
     next(err);
   }

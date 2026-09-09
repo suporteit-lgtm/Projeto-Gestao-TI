@@ -101,31 +101,81 @@ export async function getClicksignDocument(documentKey: string): Promise<Documen
   }
 
   const doc = (await res.json())?.document ?? {};
-  const signers: any[] = Array.isArray(doc.signers) ? doc.signers : [];
+  return interpretarDocumento(doc);
+}
 
-  // "closed" com todos assinados = fechado; se alguém recusou, o Clicksign
-  // marca refusal_at (no documento ou no signatário).
-  const recusa =
-    doc.refusal_at ?? signers.map((s) => s?.refusal_at).find(Boolean) ?? null;
+// Nomes de evento do Clicksign (campo "name" de cada item de "events").
+const EVENTO_ASSINOU = "sign";
+const EVENTO_RECUSOU = "refusal";
+const EVENTOS_FECHAMENTO = ["close", "auto_close", "document_closed"];
+const EVENTO_CANCELOU = "cancel";
 
-  const assinaturas = signers.map((s) => s?.signed_at).filter(Boolean);
-  const todosAssinaram = signers.length > 0 && assinaturas.length === signers.length;
-  const fechado = doc.status === "closed";
+// Traduz a resposta do Clicksign para a situação do termo.
+//
+// ATENÇÃO ao formato: os signatários NÃO têm campo "signed_at" — quem carrega
+// as datas é o array "events" (evento "sign" para cada assinatura, "refusal"
+// para recusa), e cada evento traz "occurred_at". Procurar "signed_at" no
+// signatário faz todo documento parecer pendente, mesmo já assinado.
+export function interpretarDocumento(doc: any): DocumentStatus {
+  const signers: any[] = Array.isArray(doc?.signers) ? doc.signers : [];
+  const eventos: any[] = Array.isArray(doc?.events) ? doc.events : [];
+  const nomeDoEvento = (e: any) => String(e?.name ?? "").toLowerCase();
+  const quando = (e: any) => e?.occurred_at ?? e?.created_at ?? null;
+
+  const deEvento = (nome: string) => eventos.filter((e) => nomeDoEvento(e) === nome);
+  const assinaturas = deEvento(EVENTO_ASSINOU).map(quando).filter(Boolean).sort();
+  const recusas = deEvento(EVENTO_RECUSOU).map(quando).filter(Boolean).sort();
+  const cancelamentos = deEvento(EVENTO_CANCELOU).map(quando).filter(Boolean).sort();
+  const fechamentos = eventos
+    .filter((e) => EVENTOS_FECHAMENTO.includes(nomeDoEvento(e)))
+    .map(quando)
+    .filter(Boolean)
+    .sort();
+
+  // Reserva: alguns retornos trazem a assinatura/recusa dentro do próprio
+  // signatário, em vez de (ou além de) "events". Ler as duas formas evita
+  // depender de um único formato de resposta.
+  const assinadosNoSigner = signers
+    .map((sg) => sg?.signed_at ?? sg?.signature?.created_at ?? (sg?.signature ? true : null))
+    .filter(Boolean);
+  const recusadosNoSigner = signers.map((sg) => sg?.refusal_at).filter(Boolean).sort();
+
+  const totalAssinado = Math.max(assinaturas.length, assinadosNoSigner.length);
+  const todosAssinaram = signers.length > 0 && totalAssinado >= signers.length;
+
+  const fechado = doc?.status === "closed" || fechamentos.length > 0;
+  const cancelado = doc?.status === "canceled" || cancelamentos.length > 0;
+  const recusado = recusas.length > 0 || Boolean(doc?.refusal_at) || recusadosNoSigner.length > 0;
 
   let status: TermStatus = "PENDENTE";
-  if (recusa) status = "RECUSADO";
-  else if (todosAssinaram || (fechado && assinaturas.length > 0)) status = "ASSINADO";
+  if (recusado) status = "RECUSADO";
+  else if (fechado || todosAssinaram) status = "ASSINADO";
+  // Cancelado sem recusa: não foi assinado e não será. A tela tem três
+  // situações, e "recusado" é a que leva a pessoa a agir.
+  else if (cancelado) status = "RECUSADO";
 
-  // A data da assinatura é a da última pessoa a assinar.
-  const ultima = assinaturas.sort().slice(-1)[0] ?? doc.finished_at ?? null;
+  // Datas: prefere o evento, cai para o signatário e por fim para o documento.
+  const datasDeAssinatura = assinadosNoSigner.filter((d) => typeof d === "string").sort();
+  const assinadoEm =
+    assinaturas.slice(-1)[0] ??
+    datasDeAssinatura.slice(-1)[0] ??
+    fechamentos.slice(-1)[0] ??
+    doc?.finished_at ??
+    null;
+  const recusadoEm =
+    recusas.slice(-1)[0] ??
+    recusadosNoSigner.slice(-1)[0] ??
+    doc?.refusal_at ??
+    cancelamentos.slice(-1)[0] ??
+    null;
 
   const primeiro = signers[0];
 
   return {
     status,
-    signedAt: status === "ASSINADO" && ultima ? new Date(ultima) : null,
-    refusedAt: status === "RECUSADO" && recusa ? new Date(recusa) : null,
-    url: doc.downloads?.signed_file_url ?? doc.downloads?.original_file_url ?? null,
+    signedAt: status === "ASSINADO" && assinadoEm ? new Date(assinadoEm) : null,
+    refusedAt: status === "RECUSADO" && recusadoEm ? new Date(recusadoEm) : null,
+    url: doc?.downloads?.signed_file_url ?? doc?.downloads?.original_file_url ?? null,
     signerName: primeiro?.name ?? null,
     signerEmail: primeiro?.email ?? null,
   };

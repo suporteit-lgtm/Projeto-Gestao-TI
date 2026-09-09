@@ -89,7 +89,7 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
       const base64 = pdfBase64DataUrl.split(',')[1];
 
       // 2. Envia para a API do Clicksign
-      await api("/documents/clicksign/send", {
+      const envio = await api<{ registrado?: boolean; avisoRegistro?: string }>("/documents/clicksign/send", {
         method: "POST",
         body: {
           filename,
@@ -99,10 +99,16 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
         }
       });
 
-      setSuccess("Enviado com sucesso! O signatário receberá um e-mail.");
-      setTimeout(() => {
-        onClose();
-      }, 3000);
+      if (envio?.avisoRegistro) {
+        // Enviado, mas não registrado na tela de Termos: avisa e não fecha
+        // sozinho, para a mensagem não passar batida.
+        setError(envio.avisoRegistro);
+      } else {
+        setSuccess("Enviado com sucesso! O signatário receberá um e-mail.");
+        setTimeout(() => {
+          onClose();
+        }, 3000);
+      }
     } catch (err: any) {
       setError(err.message || "Erro ao enviar para o Clicksign.");
     } finally {
