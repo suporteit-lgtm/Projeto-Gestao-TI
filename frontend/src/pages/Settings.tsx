@@ -1,10 +1,11 @@
 // Configurações: limites de alertas, unidades da empresa, geração de termo por
 // pessoa e edição do template do Termo de Responsabilidade.
 import { useEffect, useState } from "react";
-import { api, openPdf } from "../api/client";
+import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { Alert, Spinner } from "../components/ui";
 import { Unit } from "../types";
+import PDFModal, { TIPOS_TERMO, TipoTermo } from "../components/PDFModal";
 
 interface SettingsData {
   idleDaysLimit: number;
@@ -73,6 +74,9 @@ export default function Settings() {
 
   // Template do termo
   const [template, setTemplate] = useState("");
+  // Qual dos três modelos está sendo editado.
+  const [tipoTemplate, setTipoTemplate] = useState<TipoTermo>("RESPONSABILIDADE");
+  const [carregandoTpl, setCarregandoTpl] = useState(false);
   const [tplMsg, setTplMsg] = useState("");
   const [savingTpl, setSavingTpl] = useState(false);
 
@@ -80,7 +84,7 @@ export default function Settings() {
   const [pessoa, setPessoa] = useState("");
   const [unidadeTermo, setUnidadeTermo] = useState("");
   const [termoErro, setTermoErro] = useState("");
-  const [gerandoTermo, setGerandoTermo] = useState(false);
+  const [abrirTermo, setAbrirTermo] = useState(false);
 
   // Danger Zone
   const [showWipeModal, setShowWipeModal] = useState(false);
@@ -94,7 +98,7 @@ export default function Settings() {
 
   useEffect(() => {
     api<SettingsData>("/settings").then(setSettings);
-    api<{ content: string }>("/documents/template").then((t) => setTemplate(t.content));
+    carregarTemplate("RESPONSABILIDADE");
     loadUnits();
     if (user?.unitId) setUnidadeTermo(user.unitId);
   }, []);
@@ -164,11 +168,28 @@ export default function Settings() {
     }
   }
 
+  async function carregarTemplate(tipo: TipoTermo) {
+    setCarregandoTpl(true);
+    setTplMsg("");
+    try {
+      const t = await api<{ content: string }>(`/documents/template?tipo=${tipo}`);
+      setTemplate(t.content);
+      setTipoTemplate(tipo);
+    } catch (err: any) {
+      setTplMsg(err.message ?? "Não foi possível carregar o modelo.");
+    } finally {
+      setCarregandoTpl(false);
+    }
+  }
+
   async function salvarTemplate() {
     setTplMsg("");
     setSavingTpl(true);
     try {
-      await api("/documents/template", { method: "PUT", body: { content: template } });
+      await api("/documents/template", {
+        method: "PUT",
+        body: { content: template, tipo: tipoTemplate },
+      });
       setTplMsg("Template salvo com sucesso.");
     } catch (err: any) {
       setTplMsg(err.message);
@@ -178,8 +199,12 @@ export default function Settings() {
   }
 
   async function resetTemplate() {
-    if (!confirm("Restaurar o texto padrão do termo?")) return;
-    const t = await api<{ content: string }>("/documents/template/reset", { method: "POST" });
+    const rotulo = TIPOS_TERMO.find((t) => t.tipo === tipoTemplate)?.label;
+    if (!confirm(`Restaurar o texto padrão do Termo de ${rotulo}?`)) return;
+    const t = await api<{ content: string }>("/documents/template/reset", {
+      method: "POST",
+      body: { tipo: tipoTemplate },
+    });
     setTemplate(t.content);
     setTplMsg("Template restaurado para o padrão.");
   }
@@ -207,19 +232,12 @@ export default function Settings() {
     }
   }
 
-  async function gerarTermoPessoa() {
+  // O termo é montado no navegador (o backend devolve o HTML), então quem faz o
+  // PDF é o PDFModal — o mesmo usado no inventário. A rota "termo.pdf" que esta
+  // tela chamava não existe mais desde que a geração saiu do servidor.
+  function gerarTermoPessoa() {
     setTermoErro("");
-    setGerandoTermo(true);
-    try {
-      await openPdf(
-        `/documents/person/termo.pdf?nome=${encodeURIComponent(pessoa.trim())}&unitId=${unidadeTermo}`,
-        `termo-${pessoa.trim()}.pdf`
-      );
-    } catch (err: any) {
-      setTermoErro(err.message);
-    } finally {
-      setGerandoTermo(false);
-    }
+    setAbrirTermo(true);
   }
 
   async function wipeData() {
@@ -572,11 +590,11 @@ export default function Settings() {
                 <div className="flex items-end">
                   <button
                     className="btn-primary flex items-center gap-2 whitespace-nowrap w-full sm:w-auto justify-center"
-                    disabled={!pessoa.trim() || !unidadeTermo || gerandoTermo}
+                    disabled={!pessoa.trim() || !unidadeTermo}
                     onClick={gerarTermoPessoa}
                   >
-                    <i className={`ti ${gerandoTermo ? "ti-loader-2 animate-spin" : "ti-download"} text-sm`}></i>
-                    {gerandoTermo ? "Gerando..." : "Gerar PDF"}
+                    <i className="ti ti-file-text text-sm"></i>
+                    Gerar termo
                   </button>
                 </div>
               </div>
@@ -587,11 +605,31 @@ export default function Settings() {
             <SectionCard
               id="settings-template"
               icon="ti-code"
-              title="Template do Termo de Responsabilidade"
-              description="Texto em HTML com campos dinâmicos. Edite o modelo que será usado na geração de PDF."
+              title="Modelos de Termo"
+              description="Texto em HTML com campos dinâmicos. Cada modelo é usado quando você escolhe esse tipo ao gerar o termo."
               iconColor="text-slate-500"
               iconBg="bg-slate-500/10"
             >
+              {/* Qual dos três modelos está sendo editado. */}
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                {TIPOS_TERMO.map((t) => (
+                  <button
+                    key={t.tipo}
+                    type="button"
+                    onClick={() => carregarTemplate(t.tipo)}
+                    disabled={carregandoTpl}
+                    className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                      tipoTemplate === t.tipo
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                        : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+                {carregandoTpl && <span className="text-xs text-slate-400">carregando...</span>}
+              </div>
+
               {/* Placeholders reference */}
               <div className="mb-4 flex flex-wrap gap-2">
                 {placeholders.map((p) => (
@@ -714,6 +752,19 @@ export default function Settings() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Termo por pessoa: o HTML vem do backend e o PDF é montado aqui, no
+          mesmo componente usado pelo inventário. */}
+      {abrirTermo && (
+        <PDFModal
+          open
+          onClose={() => setAbrirTermo(false)}
+          htmlPath={`/documents/person/termo.html?nome=${encodeURIComponent(
+            pessoa.trim()
+          )}&unitId=${unidadeTermo}`}
+          filename={`termo-${pessoa.trim()}.pdf`}
+        />
       )}
     </div>
   );

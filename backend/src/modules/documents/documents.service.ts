@@ -3,33 +3,60 @@ import Handlebars from "handlebars";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../middlewares/error";
 import { STATUS, CONDITION, StatusKey, ConditionKey } from "../equipment/equipment.constants";
-import { DEFAULT_TERMO_TEMPLATE } from "./default-template";
+import {
+  TipoTermo,
+  TIPO_TERMO_PADRAO,
+  TIPOS_TERMO,
+  DEFINICAO_TIPOS,
+} from "./template-types";
 
-// Busca o template (cria com o padrão na primeira vez).
-export async function getTemplate() {
-  let t = await prisma.documentTemplate.findUnique({ where: { id: 1 } });
+// Busca o template de um tipo (cria com o texto padrão na primeira vez).
+export async function getTemplate(tipo: TipoTermo = TIPO_TERMO_PADRAO) {
+  const def = DEFINICAO_TIPOS[tipo];
+  let t = await prisma.documentTemplate.findUnique({ where: { id: def.id } });
   if (!t) {
     t = await prisma.documentTemplate.create({
-      data: { id: 1, content: DEFAULT_TERMO_TEMPLATE },
+      data: { id: def.id, name: def.nome, content: def.padrao },
     });
   }
-  return t;
+  return { ...t, tipo };
 }
 
-export async function updateTemplate(content: string, name?: string) {
-  await getTemplate();
+// Lista os três tipos com o texto atual de cada um, para a tela de edição.
+export async function listTemplates() {
+  return Promise.all(
+    TIPOS_TERMO.map(async (tipo) => {
+      const t = await getTemplate(tipo);
+      return {
+        tipo,
+        nome: DEFINICAO_TIPOS[tipo].nome,
+        descricao: DEFINICAO_TIPOS[tipo].descricao,
+        content: t.content,
+        updatedAt: t.updatedAt,
+      };
+    })
+  );
+}
+
+export async function updateTemplate(
+  content: string,
+  name?: string,
+  tipo: TipoTermo = TIPO_TERMO_PADRAO
+) {
+  await getTemplate(tipo);
   return prisma.documentTemplate.update({
-    where: { id: 1 },
+    where: { id: DEFINICAO_TIPOS[tipo].id },
     data: { content, ...(name ? { name } : {}) },
   });
 }
 
-// Restaura o texto padrão do termo.
-export async function resetTemplate() {
-  await getTemplate();
+// Restaura o texto padrão do tipo.
+export async function resetTemplate(tipo: TipoTermo = TIPO_TERMO_PADRAO) {
+  const def = DEFINICAO_TIPOS[tipo];
+  await getTemplate(tipo);
   return prisma.documentTemplate.update({
-    where: { id: 1 },
-    data: { content: DEFAULT_TERMO_TEMPLATE },
+    where: { id: def.id },
+    data: { content: def.padrao, name: def.nome },
   });
 }
 
@@ -106,9 +133,10 @@ function pickCpf(equipamentos: any[]): string {
 async function renderHtml(
   equipamentos: any[],
   usuario: { nome: string; email: string; cpf: string; departamento: string; gestor: string },
-  empresa: { nome: string; cnpj: string; endereco: string }
+  empresa: { nome: string; cnpj: string; endereco: string },
+  tipo: TipoTermo = TIPO_TERMO_PADRAO
 ) {
-  const template = await getTemplate();
+  const template = await getTemplate(tipo);
   const compiled = Handlebars.compile(template.content);
   return compiled({
     dataAtual: new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_BR }),
@@ -120,7 +148,11 @@ async function renderHtml(
 }
 
 // Termo a partir de UM equipamento (usa o responsável atual do item).
-export async function termoForEquipment(id: string, unitId: string): Promise<{ html: string }> {
+export async function termoForEquipment(
+  id: string,
+  unitId: string,
+  tipo: TipoTermo = TIPO_TERMO_PADRAO
+): Promise<{ html: string }> {
   const eq = await prisma.equipment.findUnique({ where: { id }, include: { category: true } });
   if (!eq || eq.unitId !== unitId) throw new AppError("Equipamento não encontrado.", 404);
   if (!eq.currentUserName) {
@@ -137,13 +169,18 @@ export async function termoForEquipment(id: string, unitId: string): Promise<{ h
       departamento: eq.department ?? "",
       gestor: eq.manager ?? "",
     },
-    empresa
+    empresa,
+    tipo
   );
   return { html };
 }
 
 // Termo a partir de UMA PESSOA: junta todos os itens em uso por ela (na unidade).
-export async function termoForPerson(nome: string, unitId: string): Promise<{ html: string }> {
+export async function termoForPerson(
+  nome: string,
+  unitId: string,
+  tipo: TipoTermo = TIPO_TERMO_PADRAO
+): Promise<{ html: string }> {
   const equipamentos = await prisma.equipment.findMany({
     where: { currentUserName: nome, status: "EM_USO", unitId },
     include: { category: true },
@@ -162,7 +199,8 @@ export async function termoForPerson(nome: string, unitId: string): Promise<{ ht
       departamento: ref.department ?? "",
       gestor: ref.manager ?? "",
     },
-    empresa
+    empresa,
+    tipo
   );
   return { html };
 }

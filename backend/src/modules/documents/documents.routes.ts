@@ -4,39 +4,55 @@ import { z } from "zod";
 import { authenticate, requireRole } from "../../middlewares/auth";
 import {
   getTemplate,
+  listTemplates,
   updateTemplate,
   resetTemplate,
   termoForEquipment,
   termoForPerson,
 } from "./documents.service";
+import { TIPOS_TERMO, tipoTermoDe } from "./template-types";
 
 const router = Router();
 router.use(authenticate);
 
 // --- Template editável ---
-router.get("/template", async (_req, res, next) => {
+// ?tipo=RESPONSABILIDADE | COMODATO | DEVOLUCAO (padrão: responsabilidade).
+router.get("/template", async (req, res, next) => {
   try {
-    res.json(await getTemplate());
+    res.json(await getTemplate(tipoTermoDe(req.query.tipo)));
   } catch (err) {
     next(err);
   }
 });
 
-const tplSchema = z.object({ content: z.string().min(1), name: z.string().optional() });
+// GET /api/documents/templates — os três tipos com o texto atual de cada um.
+router.get("/templates", async (_req, res, next) => {
+  try {
+    res.json(await listTemplates());
+  } catch (err) {
+    next(err);
+  }
+});
+
+const tplSchema = z.object({
+  content: z.string().min(1),
+  name: z.string().optional(),
+  tipo: z.enum(TIPOS_TERMO).optional(),
+});
 
 // Editar o termo: restrito a admin.
 router.put("/template", requireRole("ADMIN"), async (req, res, next) => {
   try {
-    const { content, name } = tplSchema.parse(req.body);
-    res.json(await updateTemplate(content, name));
+    const { content, name, tipo } = tplSchema.parse(req.body);
+    res.json(await updateTemplate(content, name, tipoTermoDe(tipo)));
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/template/reset", requireRole("ADMIN"), async (_req, res, next) => {
+router.post("/template/reset", requireRole("ADMIN"), async (req, res, next) => {
   try {
-    res.json(await resetTemplate());
+    res.json(await resetTemplate(tipoTermoDe(req.body?.tipo)));
   } catch (err) {
     next(err);
   }
@@ -46,7 +62,11 @@ router.post("/template/reset", requireRole("ADMIN"), async (_req, res, next) => 
 // GET /api/documents/equipment/:id/termo.html — HTML do termo de um equipamento.
 router.get("/equipment/:id/termo.html", async (req, res, next) => {
   try {
-    const result = await termoForEquipment(req.params.id, req.user!.unitId);
+    const result = await termoForEquipment(
+      req.params.id,
+      req.user!.unitId,
+      tipoTermoDe(req.query.tipo)
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -59,7 +79,7 @@ router.get("/person/termo.html", async (req, res, next) => {
     const nome = String(req.query.nome ?? "").trim();
     if (!nome) return res.status(400).json({ error: "Informe o nome da pessoa." });
     const unitId = req.query.unitId ? String(req.query.unitId) : req.user!.unitId;
-    const result = await termoForPerson(nome, unitId);
+    const result = await termoForPerson(nome, unitId, tipoTermoDe(req.query.tipo));
     res.json(result);
   } catch (err) {
     next(err);

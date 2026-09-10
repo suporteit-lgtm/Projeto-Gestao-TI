@@ -10,6 +10,15 @@ interface Signer {
   sign_as?: string;
 }
 
+// Os três modelos de termo. O texto de cada um é editável em Configurações.
+export const TIPOS_TERMO = [
+  { tipo: "RESPONSABILIDADE", label: "Responsabilidade" },
+  { tipo: "COMODATO", label: "Comodato" },
+  { tipo: "DEVOLUCAO", label: "Devolução" },
+] as const;
+
+export type TipoTermo = (typeof TIPOS_TERMO)[number]["tipo"];
+
 interface PDFModalProps {
   open: boolean;
   onClose: () => void;
@@ -20,6 +29,8 @@ interface PDFModalProps {
 }
 
 export default function PDFModal({ open, onClose, htmlPath, filename, signers, pasta }: PDFModalProps) {
+  // Qual modelo usar. Trocar aqui recarrega o documento com o outro texto.
+  const [tipo, setTipo] = useState<TipoTermo>("RESPONSABILIDADE");
   const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -35,7 +46,8 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
     setSuccess("");
     setLoading(true);
     
-    api<{ html: string }>(htmlPath)
+    const separador = htmlPath.includes("?") ? "&" : "?";
+    api<{ html: string }>(`${htmlPath}${separador}tipo=${tipo}`)
       .then((res) => {
         setHtml(res.html);
         setLoading(false);
@@ -44,7 +56,7 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
         setError(err.message || "Erro ao carregar o termo");
         setLoading(false);
       });
-  }, [open, htmlPath]);
+  }, [open, htmlPath, tipo]);
 
   function handlePrint() {
     if (!html) return;
@@ -63,6 +75,13 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
     }
   }
 
+  // "termo-Fulano.pdf" -> "termo-comodato-Fulano.pdf", para o arquivo dizer
+  // qual modelo foi gerado.
+  const nomeDoArquivo =
+    tipo === "RESPONSABILIDADE"
+      ? filename
+      : filename.replace(/^termo-/, `termo-${tipo.toLowerCase()}-`);
+
   async function handleClicksign() {
     if (!html || !signers || signers.length === 0) return;
     if (!confirm("Isso enviará um e-mail para o responsável solicitando a assinatura eletrônica. Confirmar?")) return;
@@ -78,7 +97,7 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
       
       const opt = {
         margin:       10,
-        filename:     filename,
+        filename:     nomeDoArquivo,
         image:        { type: 'jpeg' as const, quality: 0.98 },
         html2canvas:  { scale: 2 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -92,7 +111,7 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
       const envio = await api<{ registrado?: boolean; avisoRegistro?: string }>("/documents/clicksign/send", {
         method: "POST",
         body: {
-          filename,
+          filename: nomeDoArquivo,
           pdfBase64: base64,
           signers,
           pasta
@@ -117,8 +136,35 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Termo de Responsabilidade" wide>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Termo — ${TIPOS_TERMO.find((t) => t.tipo === tipo)?.label}`}
+      wide
+    >
       <div className="space-y-4">
+        {/* Modelo do termo. O texto de cada um é editável em Configurações. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mr-1">
+            Modelo
+          </span>
+          {TIPOS_TERMO.map((t) => (
+            <button
+              key={t.tipo}
+              type="button"
+              onClick={() => setTipo(t.tipo)}
+              disabled={sending}
+              className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                tipo === t.tipo
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-10">
             <Spinner />
