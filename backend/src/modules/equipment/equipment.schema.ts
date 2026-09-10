@@ -114,6 +114,31 @@ export const assignSchema = z.object({
   note: optionalString,
 });
 
+// Transferência em lote: vários equipamentos de uma vez para o estoque (quando
+// a pessoa sai) ou para outro responsável.
+export const bulkTransferSchema = z
+  .object({
+    equipmentIds: z
+      .array(z.string().min(1))
+      .min(1, "Selecione ao menos um equipamento.")
+      .max(500, "Selecione no máximo 500 equipamentos por vez."),
+    destino: z.enum(["ESTOQUE", "PESSOA"]),
+    // Usados só quando o destino é uma pessoa.
+    currentUserName: optionalString,
+    userEmail: optionalString,
+    userCpf: optionalString,
+    department: optionalString,
+    manager: optionalString,
+    deliveryDate: optionalDate,
+    note: optionalString,
+  })
+  .refine(
+    (d) => d.destino !== "PESSOA" || Boolean(d.currentUserName && d.currentUserName.trim()),
+    { message: "Informe o nome do novo responsável.", path: ["currentUserName"] }
+  );
+
+export type BulkTransferInput = z.infer<typeof bulkTransferSchema>;
+
 export type CreateEquipmentInput = z.infer<typeof createEquipmentSchema>;
 export type UpdateEquipmentInput = z.infer<typeof updateEquipmentSchema>;
 export type AssignInput = z.infer<typeof assignSchema>;

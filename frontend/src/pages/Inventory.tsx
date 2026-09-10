@@ -7,6 +7,7 @@ import { StatusBadge, ConditionBadge, Modal, Spinner, Alert } from "../component
 import EquipmentForm from "../components/EquipmentForm";
 import AssignModal from "../components/AssignModal";
 import PDFModal from "../components/PDFModal";
+import TransferModal from "../components/TransferModal";
 import { formatMoney } from "../lib/format";
 import { useData } from "../context/DataContext";
 
@@ -54,6 +55,9 @@ export default function Inventory() {
   const [confirmDelete, setConfirmDelete] = useState<Equipment | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [termoCollab, setTermoCollab] = useState<Collaborator | null>(null);
+  // Transferência em lote dos equipamentos de um colaborador.
+  const [transferindo, setTransferindo] = useState<Collaborator | null>(null);
+  const [avisoTransferencia, setAvisoTransferencia] = useState("");
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
@@ -212,6 +216,20 @@ export default function Inventory() {
       </div>
 
       {loadError && <Alert>{loadError}</Alert>}
+
+      {/* Resultado da última transferência em lote, com o que foi movido. */}
+      {avisoTransferencia && (
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3">
+          <i className="ti ti-circle-check text-emerald-600 dark:text-emerald-400 mt-0.5"></i>
+          <p className="flex-1 text-sm text-emerald-800 dark:text-emerald-300">{avisoTransferencia}</p>
+          <button
+            onClick={() => setAvisoTransferencia("")}
+            className="text-emerald-600/60 hover:text-emerald-700 dark:hover:text-emerald-300"
+          >
+            <i className="ti ti-x text-sm"></i>
+          </button>
+        </div>
+      )}
 
       {/* ── View Toggle ── */}
       <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200 dark:border-slate-700/60">
@@ -533,6 +551,14 @@ export default function Inventory() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
+                            onClick={() => setTransferindo(collab)}
+                            title="Transferir os equipamentos desta pessoa para o estoque ou para outra pessoa"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 font-medium text-xs transition-colors border border-blue-200 dark:border-blue-800/60"
+                          >
+                            <i className="ti ti-transfer text-sm"></i>
+                            Transferir
+                          </button>
+                          <button
                             onClick={() => setTermoCollab(collab)}
                             title="Gerar Termo de Responsabilidade (Todos os itens)"
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-medium text-xs transition-colors border border-emerald-200 dark:border-emerald-800/60"
@@ -684,6 +710,24 @@ export default function Inventory() {
           equipment={assigning}
           onClose={() => setAssigning(null)}
           onDone={() => { setAssigning(null); reload(); }}
+        />
+      )}
+
+      {/* Transferência em lote */}
+      {transferindo && (
+        <TransferModal
+          origem={transferindo.name}
+          equipments={transferindo.equipments}
+          onClose={() => setTransferindo(null)}
+          onDone={(r) => {
+            setTransferindo(null);
+            setAvisoTransferencia(
+              `${r.transferidos} equipamento(s) transferido(s) para ${
+                r.destino === "ESTOQUE" ? "o estoque" : r.para
+              }: ${r.assetIds.join(", ")}.`
+            );
+            reload();
+          }}
         />
       )}
 

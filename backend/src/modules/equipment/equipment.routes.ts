@@ -5,6 +5,7 @@ import {
   createEquipmentSchema,
   updateEquipmentSchema,
   assignSchema,
+  bulkTransferSchema,
 } from "./equipment.schema";
 import {
   listEquipment,
@@ -14,6 +15,7 @@ import {
   deleteEquipment,
   assignEquipment,
   unassignEquipment,
+  bulkTransfer,
 } from "./equipment.service";
 import { z } from "zod";
 
@@ -64,6 +66,17 @@ router.put("/:id", async (req, res, next) => {
   try {
     const data = updateEquipmentSchema.parse(req.body);
     res.json(await updateEquipment(req.params.id, data, req.user!.unitId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/equipment/bulk-transfer — transfere vários equipamentos de uma vez.
+// Declarada ANTES das rotas com ":id" para "bulk-transfer" não ser lido como id.
+router.post("/bulk-transfer", async (req, res, next) => {
+  try {
+    const data = bulkTransferSchema.parse(req.body);
+    res.json(await bulkTransfer(data, req.user!.unitId));
   } catch (err) {
     next(err);
   }

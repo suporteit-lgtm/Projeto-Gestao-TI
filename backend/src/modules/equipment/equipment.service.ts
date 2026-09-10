@@ -8,6 +8,7 @@ import {
   CreateEquipmentInput,
   UpdateEquipmentInput,
   AssignInput,
+  BulkTransferInput,
 } from "./equipment.schema";
 import { filterBySearch } from "./equipment.search";
 import {
@@ -233,34 +234,92 @@ async function reconcileAssignment(
 
 // Troca rápida de responsável: usado pela ação "Atribuir / Trocar usuário".
 // Coloca o item em uso, atualiza os dados do responsável e registra o histórico.
+// Dados de quem passa a ser o responsável. Usado na troca individual e na
+// transferência em lote — as duas gravam exatamente do mesmo jeito.
+interface DadosDoResponsavel {
+  currentUserName: string;
+  userEmail?: string | null;
+  userCpf?: string | null;
+  department?: string | null;
+  manager?: string | null;
+  deliveryDate?: Date | null;
+  note?: string | null;
+}
+
+// Passa o equipamento para uma pessoa, dentro de uma transação já aberta.
+async function atribuirNaTransacao(
+  tx: Prisma.TransactionClient,
+  atual: { id: string; status: string; currentUserName: string | null; statusChangedAt: Date },
+  dados: DadosDoResponsavel
+) {
+  const eq = await tx.equipment.update({
+    where: { id: atual.id },
+    data: {
+      currentUserName: dados.currentUserName,
+      userEmail: dados.userEmail ?? null,
+      userCpf: dados.userCpf ?? null,
+      department: dados.department ?? null,
+      manager: dados.manager ?? null,
+      deliveryDate: dados.deliveryDate ?? new Date(),
+      status: "EM_USO",
+      statusChangedAt: atual.status !== "EM_USO" ? new Date() : atual.statusChangedAt,
+    },
+  });
+
+  await reconcileAssignment(
+    tx,
+    atual.id,
+    atual.currentUserName,
+    eq,
+    dados.currentUserName,
+    dados.note ?? undefined
+  );
+  return eq;
+}
+
+// Devolve o equipamento ao estoque, dentro de uma transação já aberta.
+//
+// Limpa também e-mail, CPF, departamento, gestor e data de entrega: o item
+// deixou de ser de alguém, e manter o CPF de um ex-funcionário num item parado
+// no estoque não ajuda ninguém. Nada se perde — quem teve o equipamento e por
+// quanto tempo continua no histórico de responsáveis.
+async function devolverNaTransacao(
+  tx: Prisma.TransactionClient,
+  atual: { id: string; currentUserName: string | null },
+  note?: string
+) {
+  const eq = await tx.equipment.update({
+    where: { id: atual.id },
+    data: {
+      currentUserName: null,
+      userEmail: null,
+      userCpf: null,
+      department: null,
+      manager: null,
+      deliveryDate: null,
+      status: "EM_ESTOQUE",
+      statusChangedAt: new Date(),
+    },
+  });
+
+  await reconcileAssignment(tx, atual.id, atual.currentUserName, eq, null, note);
+  return eq;
+}
+
 export async function assignEquipment(id: string, input: AssignInput, unitId: string) {
   return prisma.$transaction(async (tx) => {
     const current = await tx.equipment.findUnique({ where: { id } });
     if (!current || current.unitId !== unitId) throw new AppError("Equipamento não encontrado.", 404);
 
-    const eq = await tx.equipment.update({
-      where: { id },
-      data: {
-        currentUserName: input.currentUserName,
-        userEmail: input.userEmail ?? null,
-        userCpf: input.userCpf ?? null,
-        department: input.department ?? null,
-        manager: input.manager ?? null,
-        deliveryDate: input.deliveryDate ?? new Date(),
-        status: "EM_USO",
-        statusChangedAt: current.status !== "EM_USO" ? new Date() : current.statusChangedAt,
-      },
+    return atribuirNaTransacao(tx, current, {
+      currentUserName: input.currentUserName,
+      userEmail: input.userEmail,
+      userCpf: input.userCpf,
+      department: input.department,
+      manager: input.manager,
+      deliveryDate: input.deliveryDate,
+      note: input.note,
     });
-
-    await reconcileAssignment(
-      tx,
-      id,
-      current.currentUserName,
-      eq,
-      input.currentUserName,
-      input.note ?? undefined
-    );
-    return eq;
   });
 }
 
@@ -270,17 +329,64 @@ export async function unassignEquipment(id: string, unitId: string, note?: strin
     const current = await tx.equipment.findUnique({ where: { id } });
     if (!current || current.unitId !== unitId) throw new AppError("Equipamento não encontrado.", 404);
 
-    const eq = await tx.equipment.update({
-      where: { id },
-      data: {
-        currentUserName: null,
-        status: "EM_ESTOQUE",
-        statusChangedAt: new Date(),
+    return devolverNaTransacao(tx, current, note);
+  });
+}
+
+// Transfere VÁRIOS equipamentos de uma vez: para o estoque (quando a pessoa
+// sai) ou para outro responsável.
+//
+// Tudo numa transação só: ou todos os itens são transferidos, ou nenhum. Uma
+// transferência pela metade deixaria o inventário mentindo sobre quem está com
+// o quê, que é pior do que não ter transferido.
+export async function bulkTransfer(input: BulkTransferInput, unitId: string) {
+  return prisma.$transaction(async (tx) => {
+    const ids = [...new Set(input.equipmentIds)];
+
+    const equipamentos = await tx.equipment.findMany({
+      where: { id: { in: ids }, unitId },
+      select: {
+        id: true,
+        assetId: true,
+        status: true,
+        currentUserName: true,
+        statusChangedAt: true,
       },
     });
 
-    await reconcileAssignment(tx, id, current.currentUserName, eq, null, note);
-    return eq;
+    // Confere ANTES de mexer em qualquer um: id inválido ou de outra unidade
+    // derruba a operação inteira, em vez de transferir parte.
+    if (equipamentos.length !== ids.length) {
+      const achados = new Set(equipamentos.map((e) => e.id));
+      const faltando = ids.filter((id) => !achados.has(id));
+      throw new AppError(
+        `${faltando.length} equipamento(s) não encontrado(s) nesta unidade. Recarregue a lista e tente de novo.`,
+        404
+      );
+    }
+
+    for (const eq of equipamentos) {
+      if (input.destino === "ESTOQUE") {
+        await devolverNaTransacao(tx, eq, input.note ?? undefined);
+      } else {
+        await atribuirNaTransacao(tx, eq, {
+          currentUserName: input.currentUserName!,
+          userEmail: input.userEmail,
+          userCpf: input.userCpf,
+          department: input.department,
+          manager: input.manager,
+          deliveryDate: input.deliveryDate,
+          note: input.note,
+        });
+      }
+    }
+
+    return {
+      transferidos: equipamentos.length,
+      destino: input.destino,
+      para: input.destino === "ESTOQUE" ? null : input.currentUserName!.trim(),
+      assetIds: equipamentos.map((e) => e.assetId),
+    };
   });
 }
 
