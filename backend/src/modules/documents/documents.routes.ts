@@ -87,6 +87,7 @@ router.get("/person/termo.html", async (req, res, next) => {
 });
 
 import { sendToClicksign } from "./clicksign.service";
+import { montarSignatarios } from "./signatarios";
 import { recordSubmission } from "../terms/terms.service";
 
 const clicksignSchema = z.object({
@@ -106,14 +107,18 @@ const clicksignSchema = z.object({
 router.post("/clicksign/send", async (req, res, next) => {
   try {
     const body = clicksignSchema.parse(req.body);
-    const result = await sendToClicksign(body);
+
+    // A tela manda só o colaborador; o responsável técnico e o setor de termos
+    // entram aqui, para que um clique já dispare os três convites.
+    const signers = montarSignatarios(body.signers);
+    const result = await sendToClicksign({ ...body, signers });
 
     // Registra o envio para a tela de Termos. O signatário é a pessoa do termo.
     // Falhar aqui não pode invalidar um envio que o Clicksign já aceitou — o
     // documento foi mesmo enviado. Mas também não pode falhar em silêncio: o
     // termo sairia sem aparecer na tela de Termos e ninguém saberia por quê.
     // Por isso o aviso volta na resposta, para a tela mostrar.
-    const signatario = body.signers[0];
+    const signatario = body.signers[0]; // o colaborador, não os fixos
     let registrado = false;
     let avisoRegistro: string | undefined;
 
@@ -141,7 +146,12 @@ router.post("/clicksign/send", async (req, res, next) => {
       }
     }
 
-    res.json({ ...result, registrado, avisoRegistro });
+    res.json({
+      ...result,
+      registrado,
+      avisoRegistro,
+      signatarios: signers.map((s) => ({ name: s.name, email: s.email })),
+    });
   } catch (err) {
     next(err);
   }

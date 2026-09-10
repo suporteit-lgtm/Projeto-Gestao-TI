@@ -31,6 +31,9 @@ interface PDFModalProps {
 export default function PDFModal({ open, onClose, htmlPath, filename, signers, pasta }: PDFModalProps) {
   // Qual modelo usar. Trocar aqui recarrega o documento com o outro texto.
   const [tipo, setTipo] = useState<TipoTermo>("RESPONSABILIDADE");
+  // E-mail de quem vai assinar. Editável porque no termo de devolução costuma
+  // ser o e-mail pessoal — o corporativo já foi desativado quando a pessoa sai.
+  const [emailColaborador, setEmailColaborador] = useState(signers?.[0]?.email ?? "");
   const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -38,6 +41,10 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
   const [success, setSuccess] = useState("");
 
   const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setEmailColaborador(signers?.[0]?.email ?? "");
+  }, [signers?.[0]?.email, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -84,7 +91,19 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
 
   async function handleClicksign() {
     if (!html || !signers || signers.length === 0) return;
-    if (!confirm("Isso enviará um e-mail para o responsável solicitando a assinatura eletrônica. Confirmar?")) return;
+    if (!emailColaborador.trim()) {
+      setError("Informe o e-mail de quem vai assinar antes de enviar.");
+      return;
+    }
+    if (
+      !confirm(
+        `Enviar para assinatura eletrônica?
+
+Os convites vão para ${emailColaborador.trim()}, ` +
+          `para o responsável técnico e para o setor de termos.`
+      )
+    )
+      return;
     
     setError("");
     setSending(true);
@@ -108,12 +127,18 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
       const base64 = pdfBase64DataUrl.split(',')[1];
 
       // 2. Envia para a API do Clicksign
-      const envio = await api<{ registrado?: boolean; avisoRegistro?: string }>("/documents/clicksign/send", {
+      const envio = await api<{
+        registrado?: boolean;
+        avisoRegistro?: string;
+        signatarios?: { name: string; email: string }[];
+      }>("/documents/clicksign/send", {
         method: "POST",
         body: {
           filename: nomeDoArquivo,
           pdfBase64: base64,
-          signers,
+          signers: signers?.map((s, i) =>
+            i === 0 ? { ...s, email: emailColaborador.trim() } : s
+          ),
           pasta
         }
       });
@@ -123,7 +148,12 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
         // sozinho, para a mensagem não passar batida.
         setError(envio.avisoRegistro);
       } else {
-        setSuccess("Enviado com sucesso! O signatário receberá um e-mail.");
+        const destinos = envio?.signatarios?.map((s) => s.email).join(", ");
+        setSuccess(
+          destinos
+            ? `Enviado para assinatura. Convites por e-mail para: ${destinos}.`
+            : "Enviado com sucesso! O signatário receberá um e-mail."
+        );
         setTimeout(() => {
           onClose();
         }, 3000);
@@ -177,6 +207,38 @@ export default function PDFModal({ open, onClose, htmlPath, filename, signers, p
 
             {!loading && !error && !success && (
               <>
+                {/* Quem vai assinar. O colaborador é editável; o responsável
+                    técnico e o setor de termos entram sempre, pelo servidor. */}
+                {signers && signers.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 mb-3 space-y-2">
+                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      Assinam este termo
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-slate-700 dark:text-slate-200 shrink-0">
+                        {signers[0].name}
+                      </span>
+                      <input
+                        type="email"
+                        className="input text-xs py-1 flex-1 min-w-[220px]"
+                        value={emailColaborador}
+                        onChange={(e) => setEmailColaborador(e.target.value)}
+                        placeholder="e-mail de quem vai assinar"
+                        disabled={sending}
+                      />
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      + Responsável técnico de T.I. e Setor de Termos, incluídos automaticamente.
+                    </div>
+                    {tipo === "DEVOLUCAO" && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400">
+                        <i className="ti ti-info-circle"></i> Na devolução, use o e-mail pessoal:
+                        o corporativo costuma já estar desativado.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2 justify-end mb-4">
                   <button className="btn-secondary" onClick={handlePrint} disabled={sending}>
                     Imprimir / Baixar PDF
