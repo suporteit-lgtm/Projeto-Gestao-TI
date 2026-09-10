@@ -2,7 +2,13 @@
 import Handlebars from "handlebars";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../middlewares/error";
-import { STATUS, CONDITION, StatusKey, ConditionKey } from "../equipment/equipment.constants";
+import {
+  STATUS,
+  CONDITION,
+  StatusKey,
+  ConditionKey,
+  isLineCategoryName,
+} from "../equipment/equipment.constants";
 import {
   TipoTermo,
   TIPO_TERMO_PADRAO,
@@ -66,15 +72,26 @@ function fmtDate(d: Date | null): string {
 }
 
 // Transforma um equipamento (com categoria) no formato esperado pelo template.
+//
+// Linha corporativa nao e aparelho: nao tem marca, modelo, serie nem IMEI, e
+// por isso saia com a linha inteira em branco no termo. Os dados que a
+// identificam sao outros, e entram nas colunas equivalentes:
+//   operadora -> marca      (quem presta o servico)
+//   numero    -> serie      (o que identifica a linha)
+//   ICCID     -> IMEI       (o numero do chip)
+// A troca e feita AQUI, nos dados, e nao no HTML do template: assim vale
+// tambem para quem ja personalizou o texto do termo.
 function toTemplateItem(eq: any) {
+  const linha = isLineCategoryName(eq.category?.name);
+
   return {
     tipo: eq.category?.name ?? "",
-    marca: eq.brand ?? "",
-    modelo: eq.model ?? "",
+    marca: (linha ? eq.operadora : eq.brand) ?? "",
+    modelo: (linha ? eq.plano : eq.model) ?? "",
     cor: eq.color ?? "",
-    serie: eq.serialNumber ?? "",
+    serie: (linha ? eq.telefone : eq.serialNumber) ?? "",
     patrimonio: eq.assetTag ?? "",
-    imei1: eq.imei1 ?? "",
+    imei1: (linha ? eq.iccid : eq.imei1) ?? "",
     imei2: eq.imei2 ?? "",
     condicao: CONDITION[eq.condition as ConditionKey] ?? eq.condition,
     status: STATUS[eq.status as StatusKey] ?? eq.status,
